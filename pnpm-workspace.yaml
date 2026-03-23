@@ -1,0 +1,4 @@
+# Root pnpm workspace definition for the Murmur monorepo.
+packages:
+  - apps/*
+  - packages/*

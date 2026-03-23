@@ -1,0 +1,22 @@
+{
+  "name": "murmur",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Root workspace manifest for the Murmur monorepo, including shared tooling and task orchestration.",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.1",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev --parallel",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.3",
+    "typescript": "^5.6.3"
+  }
+}

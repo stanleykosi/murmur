@@ -1,0 +1,37 @@
+{
+  "//": "Shared TypeScript baseline for all Murmur apps and packages. Downstream configs should extend this and add environment-specific options such as DOM libs or Node module settings.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@murmur/shared": [
+        "packages/shared/src/index.ts"
+      ],
+      "@murmur/shared/*": [
+        "packages/shared/src/*"
+      ]
+    },
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+    ".turbo",
+    "coverage"
+  ]
+}

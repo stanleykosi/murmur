@@ -1,0 +1,32 @@
+# Root ignore rules for the Murmur monorepo.
+
+# Dependencies
+node_modules/
+
+# Package manager and task runner caches
+.pnpm-store/
+.turbo/
+
+# Build outputs
+dist/
+build/
+.next/
+coverage/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+pnpm-debug.log*
+
+# Root planning and specification documents
+/*.md
+
+# Operating system and editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
