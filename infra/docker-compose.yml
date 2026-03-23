@@ -1,0 +1,55 @@
+# Local development infrastructure stack for Murmur.
+# This compose file intentionally mirrors only the services we still run
+# ourselves in development: Redis and Centrifugo. PostgreSQL is provided by
+# Supabase and audio transport is provided by LiveKit Cloud.
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --save
+      - "60"
+      - "1000"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  centrifugo:
+    image: centrifugo/centrifugo:v6.6.2
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    command:
+      - centrifugo
+      - -c
+      - /centrifugo/config.json
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./centrifugo.json:/centrifugo/config.json:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O - http://127.0.0.1:8000/health > /dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  redis_data:

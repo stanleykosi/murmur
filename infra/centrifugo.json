@@ -1,0 +1,45 @@
+{
+  "http_server": {
+    "address": "0.0.0.0",
+    "port": "8000"
+  },
+  "health": {
+    "enabled": true
+  },
+  "engine": {
+    "type": "redis",
+    "redis": {
+      "address": "redis://redis:6379"
+    }
+  },
+  "client": {
+    "allowed_origins": [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000"
+    ],
+    "token": {
+      "hmac_secret_key": "centrifugo_token_secret_replace_me"
+    }
+  },
+  "http_api": {
+    "key": "centrifugo_api_key_replace_me"
+  },
+  "channel": {
+    "namespaces": [
+      {
+        "name": "room",
+        "channel_regex": "^[A-Za-z0-9_-]+:(transcript|presence)$",
+        "allow_subscribe_for_client": true,
+        "allow_history_for_subscriber": true,
+        "allow_presence_for_subscriber": true,
+        "history_size": 200,
+        "history_ttl": "300s",
+        "force_recovery": true,
+        "presence": true
+      }
+    ]
+  },
+  "shutdown": {
+    "timeout": "10s"
+  }
+}
