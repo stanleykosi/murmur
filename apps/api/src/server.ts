@@ -1,9 +1,9 @@
 /**
  * Fastify bootstrap for the Murmur API service.
  *
- * This file wires together the Step 4 runtime scaffold: CORS, health checks,
- * structured error responses, Redis readiness checks, and graceful shutdown.
- * Business routes will be added under `/api` in later implementation steps.
+ * This file wires together the API runtime scaffold: CORS, health checks,
+ * structured error responses, Redis/database readiness checks, graceful
+ * shutdown, and the canonical `/api/rooms` route registration.
  */
 
 import cors from "@fastify/cors";
@@ -12,6 +12,7 @@ import Fastify from "fastify";
 import { fileURLToPath } from "node:url";
 
 import { env } from "./config/env.js";
+import { closeDatabasePool, testDatabaseConnection } from "./db/client.js";
 import {
   AppError,
   InternalServerError,
@@ -21,6 +22,7 @@ import {
 import { createLogger, logger } from "./lib/logger.js";
 import { registerAuthDecorators } from "./middleware/auth.js";
 import { closeRedis, connectRedis, pingRedis } from "./lib/redis.js";
+import { roomsRoutes } from "./routes/rooms.js";
 
 const serverLogger = createLogger({ component: "server" });
 const allowedOrigins = new Set([
@@ -72,6 +74,9 @@ export function buildServer() {
   });
 
   void app.register(sensible);
+  void app.register(roomsRoutes, {
+    prefix: "/api/rooms",
+  });
 
   app.get<{ Reply: HealthCheckResponse }>("/health", async () => {
     await pingRedis();
@@ -151,6 +156,7 @@ function registerSignalHandlers(app: ApiServer): void {
 
       try {
         await app.close();
+        await closeDatabasePool();
         await closeRedis();
         serverLogger.info({ signal }, "API shutdown complete.");
         process.exitCode = 0;
@@ -181,6 +187,7 @@ export async function startServer(): Promise<ApiServer> {
   try {
     await connectRedis();
     await pingRedis();
+    await testDatabaseConnection();
 
     await app.listen({
       host: env.HOST,
@@ -202,7 +209,7 @@ export async function startServer(): Promise<ApiServer> {
   } catch (error) {
     serverLogger.error({ err: error }, "Failed to start the Murmur API server.");
 
-    await Promise.allSettled([app.close(), closeRedis()]);
+    await Promise.allSettled([app.close(), closeDatabasePool(), closeRedis()]);
 
     throw error;
   }
