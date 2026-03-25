@@ -68,6 +68,20 @@ export interface LeaveRoomResult {
 }
 
 /**
+ * Result returned after a listener join completes successfully.
+ *
+ * The response includes the updated room payload plus the canonical persisted
+ * user ID that downstream real-time transports should use for listener
+ * identity. `presenceAdded` reflects whether Redis presence changed during
+ * this call so the route layer can compensate safely if later work fails.
+ */
+export interface JoinRoomResult {
+  listenerUserId: string;
+  presenceAdded: boolean;
+  room: Room;
+}
+
+/**
  * Database room record loaded alongside its assigned agent rows.
  */
 interface RoomWithAssignedAgents extends RoomRecord {
@@ -474,9 +488,13 @@ export async function getListenerCount(roomId: string): Promise<number> {
  *
  * @param roomId - Room UUID being joined.
  * @param clerkUserId - Authenticated Clerk user ID from the request context.
- * @returns The joined room with its updated listener count.
+ * @returns The joined room plus the persisted listener identity used by
+ * downstream token-generation flows.
  */
-export async function joinRoom(roomId: string, clerkUserId: string): Promise<Room> {
+export async function joinRoom(
+  roomId: string,
+  clerkUserId: string,
+): Promise<JoinRoomResult> {
   await getJoinableRoom(roomId);
 
   const userRecord = await getPersistedUserByClerkId(clerkUserId);
@@ -501,7 +519,11 @@ export async function joinRoom(roomId: string, clerkUserId: string): Promise<Roo
         },
       });
 
-    return getRoomById(roomId);
+    return {
+      listenerUserId: userRecord.id,
+      presenceAdded: redisAddCount === 1,
+      room: await getRoomById(roomId),
+    };
   } catch (error) {
     if (redisAddCount === 1) {
       try {

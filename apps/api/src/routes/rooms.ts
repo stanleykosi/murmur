@@ -6,7 +6,7 @@
  * rooms as an admin, and joining or leaving as an authenticated listener.
  */
 
-import type { RoomStatus } from "@murmur/shared";
+import type { Room, RoomStatus } from "@murmur/shared";
 import {
   AGENT_ROLES,
   ROOM_FORMATS,
@@ -19,6 +19,8 @@ import {
   adminPreHandler,
   assertAuthenticatedRequest,
 } from "../middleware/admin.js";
+import { createClientToken } from "../services/centrifugo.service.js";
+import { createListenerToken } from "../services/livekit.service.js";
 import { authPreHandler } from "../middleware/auth.js";
 import { UnauthorizedError, ValidationError } from "../lib/errors.js";
 import {
@@ -120,6 +122,70 @@ function getAuthenticatedClerkUserId(request: FastifyRequest): string {
 }
 
 /**
+ * Join response returned to the web client before it connects to LiveKit and
+ * Centrifugo.
+ */
+interface JoinRoomResponse {
+  agents: Room["agents"];
+  centrifugoToken: string;
+  livekitToken: string;
+  room: Room;
+}
+
+/**
+ * Completes the canonical listener room-join handshake.
+ *
+ * The room membership is persisted first so the response includes the updated
+ * listener count. If token generation fails afterwards, the route compensates
+ * only when this request introduced a new Redis presence entry; existing room
+ * memberships are left untouched so retries do not eject already-joined users.
+ *
+ * @param request - Fastify request used for structured rollback logging.
+ * @param roomId - Murmur room identifier being joined.
+ * @param clerkUserId - Authenticated Clerk user ID from the request context.
+ * @returns The room payload plus transport tokens required by the web client.
+ */
+async function completeJoinRoomFlow(
+  request: FastifyRequest,
+  roomId: string,
+  clerkUserId: string,
+): Promise<JoinRoomResponse> {
+  const joinResult = await joinRoom(roomId, clerkUserId);
+
+  try {
+    const livekitToken = await createListenerToken(
+      roomId,
+      joinResult.listenerUserId,
+    );
+    const centrifugoToken = createClientToken(joinResult.listenerUserId);
+
+    return {
+      agents: joinResult.room.agents,
+      centrifugoToken,
+      livekitToken,
+      room: joinResult.room,
+    };
+  } catch (error) {
+    if (joinResult.presenceAdded) {
+      try {
+        await leaveRoom(roomId, clerkUserId);
+      } catch (rollbackError) {
+        request.log.error(
+          {
+            clerkUserId,
+            err: rollbackError,
+            roomId,
+          },
+          "Failed to roll back room membership after token generation failed.",
+        );
+      }
+    }
+
+    throw error;
+  }
+}
+
+/**
  * Fastify route plugin exposing `/api/rooms` endpoints.
  */
 export const roomsRoutes: FastifyPluginAsync = async (app) => {
@@ -188,14 +254,13 @@ export const roomsRoutes: FastifyPluginAsync = async (app) => {
         request.params,
         "Invalid room id.",
       );
-      const room = await joinRoom(
+      const joinResponse = await completeJoinRoomFlow(
+        request,
         params.id,
         getAuthenticatedClerkUserId(request),
       );
 
-      return {
-        room,
-      };
+      return joinResponse;
     },
   );
 

@@ -29,6 +29,8 @@ const getRoomByIdMock = vi.fn();
 const createRoomMock = vi.fn();
 const joinRoomMock = vi.fn();
 const leaveRoomMock = vi.fn();
+const createListenerTokenMock = vi.fn();
+const createClientTokenMock = vi.fn();
 
 vi.mock("../middleware/auth.js", () => ({
   authPreHandler: async (request: { userId: string | null; userRole: "admin" | "listener" | null }) => {
@@ -55,6 +57,14 @@ vi.mock("../services/room.service.js", () => ({
   joinRoom: joinRoomMock,
   leaveRoom: leaveRoomMock,
   listRooms: listRoomsMock,
+}));
+
+vi.mock("../services/livekit.service.js", () => ({
+  createListenerToken: createListenerTokenMock,
+}));
+
+vi.mock("../services/centrifugo.service.js", () => ({
+  createClientToken: createClientTokenMock,
 }));
 
 type ServerModule = typeof import("../server.js");
@@ -142,6 +152,8 @@ beforeEach(() => {
   createRoomMock.mockReset();
   joinRoomMock.mockReset();
   leaveRoomMock.mockReset();
+  createListenerTokenMock.mockReset();
+  createClientTokenMock.mockReset();
 });
 
 describe("roomsRoutes", () => {
@@ -286,8 +298,15 @@ describe("roomsRoutes", () => {
   it("joins a room for the authenticated caller", async () => {
     const fixture = createRoomFixture();
     const app = buildServer();
+    const listenerUserId = "4b4b92d1-7f55-4d5d-95f4-48da7a6fd6f5";
 
-    joinRoomMock.mockResolvedValue(fixture);
+    joinRoomMock.mockResolvedValue({
+      listenerUserId,
+      presenceAdded: true,
+      room: fixture,
+    });
+    createListenerTokenMock.mockResolvedValue("livekit-token");
+    createClientTokenMock.mockReturnValue("centrifugo-token");
 
     await app.ready();
 
@@ -298,8 +317,51 @@ describe("roomsRoutes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(joinRoomMock).toHaveBeenCalledWith(fixture.id, authContext.userId);
+    expect(createListenerTokenMock).toHaveBeenCalledWith(fixture.id, listenerUserId);
+    expect(createClientTokenMock).toHaveBeenCalledWith(listenerUserId);
     expect(response.json()).toEqual({
+      agents: fixture.agents,
+      centrifugoToken: "centrifugo-token",
+      livekitToken: "livekit-token",
       room: fixture,
+    });
+
+    await app.close();
+  });
+
+  /**
+   * Ensures token-generation failures do not leave behind a newly-created room
+   * presence entry that would inflate listener counts.
+   */
+  it("rolls back a newly created join when token generation fails", async () => {
+    const fixture = createRoomFixture();
+    const app = buildServer();
+    const listenerUserId = "4b4b92d1-7f55-4d5d-95f4-48da7a6fd6f5";
+
+    joinRoomMock.mockResolvedValue({
+      listenerUserId,
+      presenceAdded: true,
+      room: fixture,
+    });
+    createListenerTokenMock.mockRejectedValue(
+      new Error("LiveKit token service is unavailable."),
+    );
+
+    await app.ready();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/rooms/${fixture.id}/join`,
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(leaveRoomMock).toHaveBeenCalledWith(fixture.id, authContext.userId);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "internal_server_error",
+        message: "Internal server error.",
+        statusCode: 500,
+      },
     });
 
     await app.close();
