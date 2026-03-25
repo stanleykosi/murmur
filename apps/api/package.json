@@ -13,6 +13,7 @@
     "build": "pnpm --filter @murmur/shared build && tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
+    "seed": "tsx src/db/seed.ts",
     "start": "node dist/server.js",
     "typecheck": "pnpm --filter @murmur/shared build && tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
