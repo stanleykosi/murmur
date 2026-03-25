@@ -18,10 +18,7 @@ watchPatterns = [
   "infra/api.railway.toml"
 ]
 
-[deploy]
-# Temporary bootstrap command for the canonical Supabase dataset. Remove this
-# after the first successful seed so future deploys do not re-run the seed.
-preDeployCommand = "pnpm --filter api seed"
+
 startCommand = "pnpm --filter api start"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
