@@ -19,6 +19,7 @@ import {
   serializeErrorResponse,
 } from "./lib/errors.js";
 import { createLogger, logger } from "./lib/logger.js";
+import { registerAuthDecorators } from "./middleware/auth.js";
 import { closeRedis, connectRedis, pingRedis } from "./lib/redis.js";
 
 const serverLogger = createLogger({ component: "server" });
@@ -54,6 +55,8 @@ export function buildServer() {
     loggerInstance: logger,
     disableRequestLogging: false,
   });
+
+  registerAuthDecorators(app);
 
   void app.register(cors, {
     origin(origin, callback) {
