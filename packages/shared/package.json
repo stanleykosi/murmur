@@ -1,11 +1,21 @@
 {
+  "//": "Workspace manifest for the Murmur shared package, published internally as an ESM build artifact for the web, API, and agent services.",
   "name": "@murmur/shared",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Shared Murmur domain types, event contracts, and runtime constants for the monorepo.",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

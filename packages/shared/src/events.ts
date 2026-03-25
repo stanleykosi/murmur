@@ -3,7 +3,7 @@
  * transcript and presence streams.
  */
 
-import type { TranscriptEntry } from "./types";
+import type { TranscriptEntry } from "./types.js";
 
 /**
  * Transcript payload published for each spoken agent utterance.

@@ -1,0 +1,857 @@
+{
+  "id": "a2c7ae7b-bd7e-4ded-ac35-f29c928c434d",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.agents": {
+      "name": "agents",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "personality": {
+          "name": "personality",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "voice_id": {
+          "name": "voice_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tts_provider": {
+          "name": "tts_provider",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'cartesia'"
+        },
+        "avatar_url": {
+          "name": "avatar_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "accent_color": {
+          "name": "accent_color",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'#FFFFFF'"
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "agents_name_unique": {
+          "name": "agents_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name"
+          ]
+        }
+      },
+      "policies": {
+        "agents_service_role_select": {
+          "name": "agents_service_role_select",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        },
+        "agents_service_role_insert": {
+          "name": "agents_service_role_insert",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "service_role"
+          ],
+          "withCheck": "true"
+        },
+        "agents_service_role_update": {
+          "name": "agents_service_role_update",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        },
+        "agents_service_role_delete": {
+          "name": "agents_service_role_delete",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        }
+      },
+      "checkConstraints": {
+        "agents_tts_provider_check": {
+          "name": "agents_tts_provider_check",
+          "value": "\"tts_provider\" in ('cartesia', 'elevenlabs')"
+        },
+        "agents_accent_color_check": {
+          "name": "agents_accent_color_check",
+          "value": "\"accent_color\" ~ '^#[0-9A-Fa-f]{6}$'"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.room_agents": {
+      "name": "room_agents",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "room_id": {
+          "name": "room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'participant'"
+        },
+        "joined_at": {
+          "name": "joined_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_room_agents_room": {
+          "name": "idx_room_agents_room",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "room_agents_room_id_rooms_id_fk": {
+          "name": "room_agents_room_id_rooms_id_fk",
+          "tableFrom": "room_agents",
+          "tableTo": "rooms",
+          "columnsFrom": [
+            "room_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "room_agents_agent_id_agents_id_fk": {
+          "name": "room_agents_agent_id_agents_id_fk",
+          "tableFrom": "room_agents",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "room_agents_room_id_agent_id_unique": {
+          "name": "room_agents_room_id_agent_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "room_id",
+            "agent_id"
+          ]
+        }
+      },
+      "policies": {
+        "room_agents_service_role_select": {
+          "name": "room_agents_service_role_select",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        },
+        "room_agents_service_role_insert": {
+          "name": "room_agents_service_role_insert",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "service_role"
+          ],
+          "withCheck": "true"
+        },
+        "room_agents_service_role_update": {
+          "name": "room_agents_service_role_update",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        },
+        "room_agents_service_role_delete": {
+          "name": "room_agents_service_role_delete",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        }
+      },
+      "checkConstraints": {
+        "room_agents_role_check": {
+          "name": "room_agents_role_check",
+          "value": "\"role\" in ('host', 'participant')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.room_listeners": {
+      "name": "room_listeners",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "room_id": {
+          "name": "room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "joined_at": {
+          "name": "joined_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "left_at": {
+          "name": "left_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_room_listeners_room": {
+          "name": "idx_room_listeners_room",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "room_listeners_room_id_rooms_id_fk": {
+          "name": "room_listeners_room_id_rooms_id_fk",
+          "tableFrom": "room_listeners",
+          "tableTo": "rooms",
+          "columnsFrom": [
+            "room_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "room_listeners_user_id_users_id_fk": {
+          "name": "room_listeners_user_id_users_id_fk",
+          "tableFrom": "room_listeners",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "room_listeners_room_id_user_id_unique": {
+          "name": "room_listeners_room_id_user_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "room_id",
+            "user_id"
+          ]
+        }
+      },
+      "policies": {
+        "room_listeners_service_role_select": {
+          "name": "room_listeners_service_role_select",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        },
+        "room_listeners_service_role_insert": {
+          "name": "room_listeners_service_role_insert",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "service_role"
+          ],
+          "withCheck": "true"
+        },
+        "room_listeners_service_role_update": {
+          "name": "room_listeners_service_role_update",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        },
+        "room_listeners_service_role_delete": {
+          "name": "room_listeners_service_role_delete",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.rooms": {
+      "name": "rooms",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "topic": {
+          "name": "topic",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "format": {
+          "name": "format",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'free_for_all'"
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'live'"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_rooms_status": {
+          "name": "idx_rooms_status",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_rooms_created_at": {
+          "name": "idx_rooms_created_at",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "rooms_created_by_users_id_fk": {
+          "name": "rooms_created_by_users_id_fk",
+          "tableFrom": "rooms",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "rooms_service_role_select": {
+          "name": "rooms_service_role_select",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        },
+        "rooms_service_role_insert": {
+          "name": "rooms_service_role_insert",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "service_role"
+          ],
+          "withCheck": "true"
+        },
+        "rooms_service_role_update": {
+          "name": "rooms_service_role_update",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        },
+        "rooms_service_role_delete": {
+          "name": "rooms_service_role_delete",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        }
+      },
+      "checkConstraints": {
+        "rooms_format_check": {
+          "name": "rooms_format_check",
+          "value": "\"format\" in ('free_for_all', 'moderated')"
+        },
+        "rooms_status_check": {
+          "name": "rooms_status_check",
+          "value": "\"status\" in ('scheduled', 'live', 'ended')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.transcripts": {
+      "name": "transcripts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "room_id": {
+          "name": "room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "was_filtered": {
+          "name": "was_filtered",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_transcripts_room_time": {
+          "name": "idx_transcripts_room_time",
+          "columns": [
+            {
+              "expression": "room_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "transcripts_room_id_rooms_id_fk": {
+          "name": "transcripts_room_id_rooms_id_fk",
+          "tableFrom": "transcripts",
+          "tableTo": "rooms",
+          "columnsFrom": [
+            "room_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "transcripts_agent_id_agents_id_fk": {
+          "name": "transcripts_agent_id_agents_id_fk",
+          "tableFrom": "transcripts",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "transcripts_service_role_select": {
+          "name": "transcripts_service_role_select",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        },
+        "transcripts_service_role_insert": {
+          "name": "transcripts_service_role_insert",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "service_role"
+          ],
+          "withCheck": "true"
+        },
+        "transcripts_service_role_update": {
+          "name": "transcripts_service_role_update",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        },
+        "transcripts_service_role_delete": {
+          "name": "transcripts_service_role_delete",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "clerk_id": {
+          "name": "clerk_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "avatar_url": {
+          "name": "avatar_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'listener'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_users_clerk_id": {
+          "name": "idx_users_clerk_id",
+          "columns": [
+            {
+              "expression": "clerk_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_clerk_id_unique": {
+          "name": "users_clerk_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "clerk_id"
+          ]
+        },
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {
+        "users_service_role_select": {
+          "name": "users_service_role_select",
+          "as": "PERMISSIVE",
+          "for": "SELECT",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        },
+        "users_service_role_insert": {
+          "name": "users_service_role_insert",
+          "as": "PERMISSIVE",
+          "for": "INSERT",
+          "to": [
+            "service_role"
+          ],
+          "withCheck": "true"
+        },
+        "users_service_role_update": {
+          "name": "users_service_role_update",
+          "as": "PERMISSIVE",
+          "for": "UPDATE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        },
+        "users_service_role_delete": {
+          "name": "users_service_role_delete",
+          "as": "PERMISSIVE",
+          "for": "DELETE",
+          "to": [
+            "service_role"
+          ],
+          "using": "true"
+        }
+      },
+      "checkConstraints": {
+        "users_role_check": {
+          "name": "users_role_check",
+          "value": "\"role\" in ('listener', 'admin')"
+        }
+      },
+      "isRLSEnabled": true
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

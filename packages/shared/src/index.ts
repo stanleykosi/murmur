@@ -2,6 +2,6 @@
  * Barrel exports for the shared Murmur workspace package.
  */
 
-export * from "./constants";
-export * from "./events";
-export * from "./types";
+export * from "./constants.js";
+export * from "./events.js";
+export * from "./types.js";

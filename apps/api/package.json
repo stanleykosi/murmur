@@ -10,9 +10,11 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @murmur/shared build && tsc -p tsconfig.json",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
     "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "pnpm --filter @murmur/shared build && tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
@@ -34,6 +36,7 @@
     "@types/jsonwebtoken": "^9.0.8",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
+    "drizzle-kit": "0.31.10",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
