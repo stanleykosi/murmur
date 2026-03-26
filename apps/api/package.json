@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "pnpm --filter @murmur/shared build && tsc -p tsconfig.json",
+    "build": "pnpm --filter @murmur/shared build && tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
     "seed": "tsx src/db/seed.ts",
@@ -31,6 +31,7 @@
     "livekit-server-sdk": "^2.10.2",
     "pg": "^8.13.1",
     "pino": "^9.5.0",
+    "svix": "^1.89.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

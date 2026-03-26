@@ -12,9 +12,11 @@ const REQUIRED_API_ENV = {
   CENTRIFUGO_API_URL: "http://centrifugo.internal:8000",
   CENTRIFUGO_TOKEN_SECRET: "centrifugo_token_secret",
   CLERK_SECRET_KEY: "sk_test_clerk_secret",
+  CLERK_WEBHOOK_SECRET: "whsec_test_secret",
   DATABASE_URL: "postgresql://postgres:secret@example.com:5432/postgres",
   LIVEKIT_API_KEY: "livekit_api_key",
   LIVEKIT_API_SECRET: "livekit_api_secret",
+  LIVEKIT_URL: "https://murmur-test.livekit.cloud",
   REDIS_URL: "redis://default:secret@example.com:6379",
   SENTRY_DSN: "https://public@example.ingest.sentry.io/12345",
 } as const;
@@ -27,10 +29,13 @@ const authContext = {
 const listRoomsMock = vi.fn();
 const getRoomByIdMock = vi.fn();
 const createRoomMock = vi.fn();
+const endRoomMock = vi.fn();
 const joinRoomMock = vi.fn();
 const leaveRoomMock = vi.fn();
 const createListenerTokenMock = vi.fn();
 const createClientTokenMock = vi.fn();
+const deleteLiveKitRoomMock = vi.fn();
+const publishRoomEndedMock = vi.fn();
 
 vi.mock("../middleware/auth.js", () => ({
   authPreHandler: async (request: { userId: string | null; userRole: "admin" | "listener" | null }) => {
@@ -53,6 +58,7 @@ vi.mock("../middleware/auth.js", () => ({
 
 vi.mock("../services/room.service.js", () => ({
   createRoom: createRoomMock,
+  endRoom: endRoomMock,
   getRoomById: getRoomByIdMock,
   joinRoom: joinRoomMock,
   leaveRoom: leaveRoomMock,
@@ -61,10 +67,12 @@ vi.mock("../services/room.service.js", () => ({
 
 vi.mock("../services/livekit.service.js", () => ({
   createListenerToken: createListenerTokenMock,
+  deleteRoom: deleteLiveKitRoomMock,
 }));
 
 vi.mock("../services/centrifugo.service.js", () => ({
   createClientToken: createClientTokenMock,
+  publishRoomEnded: publishRoomEndedMock,
 }));
 
 type ServerModule = typeof import("../server.js");
@@ -150,10 +158,13 @@ beforeEach(() => {
   listRoomsMock.mockReset();
   getRoomByIdMock.mockReset();
   createRoomMock.mockReset();
+  endRoomMock.mockReset();
   joinRoomMock.mockReset();
   leaveRoomMock.mockReset();
   createListenerTokenMock.mockReset();
   createClientTokenMock.mockReset();
+  deleteLiveKitRoomMock.mockReset();
+  publishRoomEndedMock.mockReset();
 });
 
 describe("roomsRoutes", () => {

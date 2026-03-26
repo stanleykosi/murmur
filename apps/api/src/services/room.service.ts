@@ -68,6 +68,14 @@ export interface LeaveRoomResult {
 }
 
 /**
+ * Result returned after ending a room through the admin control flow.
+ */
+export interface EndRoomResult {
+  alreadyEnded: boolean;
+  room: Room;
+}
+
+/**
  * Result returned after a listener join completes successfully.
  *
  * The response includes the updated room payload plus the canonical persisted
@@ -466,6 +474,50 @@ export async function createRoom(input: CreateRoomInput): Promise<Room> {
   });
 
   return getRoomById(persistedRoom.id);
+}
+
+/**
+ * Marks a room as ended while preserving the original `endedAt` timestamp on
+ * retries.
+ *
+ * The data mutation is intentionally idempotent so admin operators can retry
+ * later cleanup steps if LiveKit teardown or event publishing fails after the
+ * room status has already been persisted.
+ *
+ * @param roomId - Room UUID to end.
+ * @returns The ended room payload plus an idempotency flag.
+ * @throws {NotFoundError} When the room does not exist.
+ */
+export async function endRoom(roomId: string): Promise<EndRoomResult> {
+  const roomRecord = await getRoomRecordWithAgents(roomId);
+
+  if (roomRecord.status === "ended") {
+    return {
+      alreadyEnded: true,
+      room: mapRoomRecordToRoom(roomRecord, await getListenerCount(roomId)),
+    };
+  }
+
+  const endedAt = new Date().toISOString();
+  const [updatedRoom] = await db
+    .update(rooms)
+    .set({
+      endedAt,
+      status: "ended",
+    })
+    .where(eq(rooms.id, roomId))
+    .returning({
+      id: rooms.id,
+    });
+
+  if (!updatedRoom) {
+    throw new Error(`Ending room "${roomId}" did not return an updated row.`);
+  }
+
+  return {
+    alreadyEnded: false,
+    room: await getRoomById(roomId),
+  };
 }
 
 /**

@@ -3,7 +3,8 @@
  *
  * This file wires together the API runtime scaffold: CORS, health checks,
  * structured error responses, Redis/database readiness checks, graceful
- * shutdown, and the canonical `/api/rooms` route registration.
+ * shutdown, and the canonical route registration for rooms, agents, admin
+ * controls, and Clerk webhooks.
  */
 
 import cors from "@fastify/cors";
@@ -22,7 +23,10 @@ import {
 import { createLogger, logger } from "./lib/logger.js";
 import { registerAuthDecorators } from "./middleware/auth.js";
 import { closeRedis, connectRedis, pingRedis } from "./lib/redis.js";
+import { adminRoutes } from "./routes/admin.js";
+import { agentsRoutes } from "./routes/agents.js";
 import { roomsRoutes } from "./routes/rooms.js";
+import { webhookRoutes } from "./routes/webhooks.js";
 
 const serverLogger = createLogger({ component: "server" });
 const allowedOrigins = new Set([
@@ -74,8 +78,17 @@ export function buildServer() {
   });
 
   void app.register(sensible);
+  void app.register(agentsRoutes, {
+    prefix: "/api/agents",
+  });
+  void app.register(adminRoutes, {
+    prefix: "/api/admin",
+  });
   void app.register(roomsRoutes, {
     prefix: "/api/rooms",
+  });
+  void app.register(webhookRoutes, {
+    prefix: "/api/webhooks",
   });
 
   app.get<{ Reply: HealthCheckResponse }>("/health", async () => {

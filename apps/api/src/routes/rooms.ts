@@ -13,7 +13,7 @@ import {
   ROOM_STATUSES,
 } from "@murmur/shared";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { z, type ZodType } from "zod";
+import { z } from "zod";
 
 import {
   adminPreHandler,
@@ -22,7 +22,8 @@ import {
 import { createClientToken } from "../services/centrifugo.service.js";
 import { createListenerToken } from "../services/livekit.service.js";
 import { authPreHandler } from "../middleware/auth.js";
-import { UnauthorizedError, ValidationError } from "../lib/errors.js";
+import { UnauthorizedError } from "../lib/errors.js";
+import { parseWithSchema } from "../lib/validation.js";
 import {
   createRoom,
   getRoomById,
@@ -68,41 +69,6 @@ const createRoomBodySchema = z
       .min(1, "Room topic is required."),
   })
   .strict();
-
-/**
- * Serializes Zod issues into a stable payload shape for API error responses.
- *
- * @param issues - Validation issues emitted by Zod.
- * @returns Flat issue objects containing path and message details.
- */
-function mapZodIssues(
-  issues: ReadonlyArray<z.ZodIssue>,
-): Array<{ message: string; path: string }> {
-  return issues.map((issue) => ({
-    message: issue.message,
-    path: issue.path.join("."),
-  }));
-}
-
-/**
- * Parses untyped request input with Zod and converts failures into the API's
- * canonical validation error class.
- *
- * @param schema - Zod schema describing the expected request shape.
- * @param input - Raw request input to validate.
- * @param message - Client-facing validation failure message.
- * @returns The parsed and strongly typed input value.
- * @throws {ValidationError} When the payload does not match the schema.
- */
-function parseWithSchema<T>(schema: ZodType<T>, input: unknown, message: string): T {
-  const parsed = schema.safeParse(input);
-
-  if (!parsed.success) {
-    throw new ValidationError(message, mapZodIssues(parsed.error.issues));
-  }
-
-  return parsed.data;
-}
 
 /**
  * Returns the authenticated Clerk user ID attached by the auth middleware.

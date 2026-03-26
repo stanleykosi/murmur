@@ -1,0 +1,8 @@
+[
+  "\\bassholes?\\b",
+  "\\bbastards?\\b",
+  "\\bbitch(?:es)?\\b",
+  "\\bfuck(?:er|ers|ed|ing|s)?\\b",
+  "\\bmotherfuck(?:er|ers|ing)?\\b",
+  "\\bshit(?:head|heads|ty|ting|s)?\\b"
+]

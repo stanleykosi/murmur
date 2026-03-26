@@ -13,9 +13,11 @@ const REQUIRED_API_ENV = {
   CENTRIFUGO_API_URL: "http://centrifugo.internal:8000",
   CENTRIFUGO_TOKEN_SECRET: "centrifugo_token_secret",
   CLERK_SECRET_KEY: "sk_test_clerk_secret",
+  CLERK_WEBHOOK_SECRET: "whsec_test_secret",
   DATABASE_URL: "postgresql://postgres:secret@example.com:5432/postgres",
   LIVEKIT_API_KEY: "livekit_api_key",
   LIVEKIT_API_SECRET: "livekit_api_secret",
+  LIVEKIT_URL: "https://murmur-test.livekit.cloud",
   REDIS_URL: "redis://default:secret@example.com:6379",
   SENTRY_DSN: "https://public@example.ingest.sentry.io/12345",
 } as const;
