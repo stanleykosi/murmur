@@ -13,8 +13,6 @@ import type { Metadata } from "next";
 import { Newsreader, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 
-import Footer from "@/components/layout/Footer";
-import Header from "@/components/layout/Header";
 import ToastProvider from "@/components/ui/Toast";
 import { fluidClerkAppearance } from "@/lib/clerk-appearance";
 
@@ -69,13 +67,7 @@ export default function RootLayout({
       <body className={[newsreader.variable, spaceGrotesk.variable].join(" ")}>
         <ClerkProvider appearance={fluidClerkAppearance}>
           <ToastProvider>
-            <div className="site-shell">
-              <Header />
-              <main className="site-main">
-                <div className="page-container page-shell">{children}</div>
-              </main>
-              <Footer />
-            </div>
+            {children}
           </ToastProvider>
         </ClerkProvider>
       </body>
