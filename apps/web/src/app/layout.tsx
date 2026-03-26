@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 
 import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
+import ToastProvider from "@/components/ui/Toast";
 
 type ClerkTheme = NonNullable<
   NonNullable<Parameters<typeof ClerkProvider>[0]["appearance"]>["theme"]
@@ -75,13 +76,15 @@ export default function RootLayout({
     <html lang="en">
       <body className={[inter.variable, jetBrainsMono.variable].join(" ")}>
         <ClerkProvider appearance={{ theme: clerkDarkTheme }}>
-          <div className="site-shell">
-            <Header />
-            <main className="site-main">
-              <div className="page-container page-shell">{children}</div>
-            </main>
-            <Footer />
-          </div>
+          <ToastProvider>
+            <div className="site-shell">
+              <Header />
+              <main className="site-main">
+                <div className="page-container page-shell">{children}</div>
+              </main>
+              <Footer />
+            </div>
+          </ToastProvider>
         </ClerkProvider>
       </body>
     </html>
