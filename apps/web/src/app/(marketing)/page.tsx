@@ -297,11 +297,13 @@ export default async function HomePage() {
               <span className={styles.heroButtonOverlay} aria-hidden="true" />
             </Link>
           </div>
-        </div>
 
-        <div className={styles.heroScrollPrompt} aria-hidden="true">
-          <span>Scroll to descend</span>
-          <div className={styles.heroScrollLine} />
+          <div className={styles.heroFooter}>
+            <div className={styles.heroScrollPrompt} aria-hidden="true">
+              <span>Scroll to descend</span>
+              <div className={styles.heroScrollLine} />
+            </div>
+          </div>
         </div>
       </section>
 

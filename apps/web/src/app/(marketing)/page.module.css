@@ -6,14 +6,22 @@
 
 .navBar {
   position: fixed;
-  top: 0;
+  top: 1rem;
+  left: 50%;
   z-index: 50;
   display: flex;
-  width: 100%;
+  width: min(calc(100% - 2.5rem), 88rem);
   align-items: center;
   justify-content: space-between;
-  padding: 2rem 3rem;
-  backdrop-filter: blur(24px);
+  padding: 1.35rem 2rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(18, 18, 22, 0.78), rgba(10, 10, 12, 0.5));
+  box-shadow:
+    inset 0 0 0 1px rgba(229, 231, 235, 0.08),
+    0 28px 56px -40px rgba(229, 231, 235, 0.18);
+  backdrop-filter: blur(28px);
+  transform: translateX(-50%);
 }
 
 .brand {
@@ -78,12 +86,12 @@
 .heroSection {
   position: relative;
   display: flex;
-  min-height: 100vh;
+  min-height: max(100vh, 52rem);
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   overflow: hidden;
-  padding: 2rem 1.5rem;
+  padding: clamp(8.5rem, 16vw, 11rem) 1.5rem clamp(4.5rem, 10vw, 7rem);
 }
 
 .heroBackdrop {
@@ -128,6 +136,7 @@
   z-index: 10;
   max-width: 72rem;
   text-align: center;
+  margin-top: clamp(1rem, 6vh, 3rem);
 }
 
 .heroEyebrow {
@@ -160,7 +169,7 @@
   align-items: center;
   justify-content: center;
   gap: 3rem;
-  margin-top: 4rem;
+  margin-top: clamp(3rem, 7vw, 5rem);
 }
 
 .heroDivider {
@@ -222,19 +231,22 @@
   transform: translateY(0);
 }
 
+.heroFooter {
+  display: flex;
+  justify-content: center;
+  margin-top: clamp(3rem, 8vw, 5.5rem);
+}
+
 .heroScrollPrompt {
-  position: absolute;
-  bottom: 3rem;
-  left: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1rem;
   opacity: 0.4;
-  transform: translateX(-50%);
   font-family: var(--font-sans);
   font-size: 0.625rem;
   letter-spacing: 0.3em;
+  pointer-events: none;
   text-transform: uppercase;
 }
 
@@ -933,12 +945,19 @@
   }
 
   .heroMeta {
-    flex-direction: row;
-    gap: 3rem;
+    display: grid;
+    grid-template-columns: auto minmax(18rem, 22rem) auto;
+    align-items: center;
+    justify-content: center;
+    column-gap: 4rem;
   }
 
   .heroDivider {
     display: block;
+  }
+
+  .heroButton {
+    justify-self: start;
   }
 
   .sectionHeader {
@@ -1000,12 +1019,18 @@
   }
 
   .navBar {
-    padding-top: 1.5rem;
-    padding-bottom: 1.5rem;
+    top: 0.75rem;
+    width: calc(100% - 1rem);
+    padding: 1rem 1.25rem;
   }
 
   .heroDescription {
     text-align: center;
+  }
+
+  .heroSection {
+    min-height: max(100vh, 46rem);
+    padding-top: 8rem;
   }
 
   .portalPrimaryCard,
