@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const REQUIRED_API_ENV = {
+  CORS_ALLOWED_ORIGINS: "http://localhost:3000,https://app.example.com",
   CENTRIFUGO_API_KEY: "centrifugo_api_key",
   CENTRIFUGO_API_URL: "http://centrifugo.internal:8000",
   CENTRIFUGO_TOKEN_SECRET: "centrifugo_token_secret",
@@ -131,6 +132,59 @@ describe("agentsRoutes", () => {
     expect(response.json()).toEqual({
       agents: [fixture],
     });
+
+    await app.close();
+  });
+
+  /**
+   * Applies the configured browser-origin allowlist to public API responses so
+   * deployed frontends can call the API without relying on hardcoded domains.
+   */
+  it("adds CORS headers for configured frontend origins", async () => {
+    const fixture = createAgentFixture();
+    const app = buildServer();
+
+    listAgentsMock.mockResolvedValue([fixture]);
+
+    await app.ready();
+
+    const response = await app.inject({
+      headers: {
+        origin: "https://app.example.com",
+      },
+      method: "GET",
+      url: "/api/agents",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "https://app.example.com",
+    );
+
+    await app.close();
+  });
+
+  /**
+   * Omits browser CORS headers for origins outside the configured allowlist.
+   */
+  it("does not add CORS headers for unconfigured origins", async () => {
+    const fixture = createAgentFixture();
+    const app = buildServer();
+
+    listAgentsMock.mockResolvedValue([fixture]);
+
+    await app.ready();
+
+    const response = await app.inject({
+      headers: {
+        origin: "https://blocked.example.com",
+      },
+      method: "GET",
+      url: "/api/agents",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
 
     await app.close();
   });

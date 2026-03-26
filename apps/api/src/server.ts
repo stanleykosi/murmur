@@ -29,12 +29,6 @@ import { roomsRoutes } from "./routes/rooms.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 
 const serverLogger = createLogger({ component: "server" });
-const allowedOrigins = new Set([
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "https://murmur.app",
-  "https://www.murmur.app",
-]);
 
 let registeredSignalHandlers = false;
 
@@ -61,6 +55,7 @@ export function buildServer() {
     loggerInstance: logger,
     disableRequestLogging: false,
   });
+  const allowedOrigins = new Set(env.CORS_ALLOWED_ORIGINS);
 
   registerAuthDecorators(app);
 

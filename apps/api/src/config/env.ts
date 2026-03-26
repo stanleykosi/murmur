@@ -55,6 +55,65 @@ function requiredUrl(label: string): z.ZodType<string> {
   }, `${label} must be a valid URL.`);
 }
 
+/**
+ * Builds a required comma-separated origin list validator for browser-facing
+ * CORS configuration.
+ *
+ * Each entry must be an absolute URL with a scheme; values are normalized to
+ * their URL origin so operators can supply either `https://example.com` or
+ * `https://example.com/` without changing runtime behavior.
+ *
+ * @param label - Human-readable variable name used in validation messages.
+ * @returns A Zod schema that yields a de-duplicated list of normalized origins.
+ */
+function requiredOriginList(label: string): z.ZodType<string[], z.ZodTypeDef, string> {
+  return requiredString(label).transform((value, context) => {
+    const rawEntries = value.split(",");
+    let hasValidationIssue = false;
+
+    if (rawEntries.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${label} must include at least one origin.`,
+      });
+      hasValidationIssue = true;
+
+      return z.NEVER;
+    }
+
+    const normalizedOrigins: string[] = [];
+
+    for (const [index, rawEntry] of rawEntries.entries()) {
+      const entry = rawEntry.trim();
+
+      if (entry.length === 0) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${label} contains an empty origin at position ${index + 1}.`,
+        });
+        hasValidationIssue = true;
+        continue;
+      }
+
+      try {
+        normalizedOrigins.push(new URL(entry).origin);
+      } catch {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${label} contains an invalid URL at position ${index + 1}: "${entry}".`,
+        });
+        hasValidationIssue = true;
+      }
+    }
+
+    if (hasValidationIssue) {
+      return z.NEVER;
+    }
+
+    return Array.from(new Set(normalizedOrigins));
+  });
+}
+
 const ApiEnvSchema = z.object({
   NODE_ENV: z.enum(NODE_ENVS).default("development"),
   HOST: z
@@ -71,6 +130,7 @@ const ApiEnvSchema = z.object({
     .max(65535, "PORT must be less than or equal to 65535.")
     .default(3000),
   LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
+  CORS_ALLOWED_ORIGINS: requiredOriginList("CORS_ALLOWED_ORIGINS"),
   DATABASE_URL: requiredUrl("DATABASE_URL"),
   REDIS_URL: requiredUrl("REDIS_URL"),
   CLERK_SECRET_KEY: requiredString("CLERK_SECRET_KEY"),

@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const REQUIRED_API_ENV = {
+  CORS_ALLOWED_ORIGINS: "http://localhost:3000,https://app.example.com",
   CENTRIFUGO_API_KEY: "centrifugo_api_key",
   CENTRIFUGO_API_URL: "http://centrifugo.internal:8000",
   CENTRIFUGO_TOKEN_SECRET: "centrifugo_token_secret",

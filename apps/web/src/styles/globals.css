@@ -465,6 +465,147 @@ svg {
   background-clip: padding-box;
 }
 
+/*
+ * Landing page
+ *
+ * Step 17 introduces Murmur's first signed-out marketing surface. These
+ * styles stay route-specific and build entirely on the canonical design
+ * tokens above instead of creating a parallel visual system.
+ */
+
+.landing-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+  gap: var(--space-5);
+  align-items: center;
+}
+
+.landing-copy {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 40rem;
+}
+
+.landing-copy h1 {
+  max-width: 12ch;
+}
+
+.landing-copy p {
+  max-width: 38rem;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.landing-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.landing-visual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 400px;
+  padding: var(--space-4);
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(124, 92, 255, 0.28), transparent 34%),
+    radial-gradient(circle at 82% 18%, rgba(0, 212, 255, 0.22), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
+    rgba(17, 19, 26, 0.88);
+}
+
+.landing-visual::before {
+  content: "";
+  position: absolute;
+  inset: 14% 10%;
+  border-radius: var(--radius-panel);
+  background:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.08), transparent 64%),
+    linear-gradient(180deg, rgba(124, 92, 255, 0.12), rgba(0, 212, 255, 0.05));
+  filter: blur(20px);
+  opacity: 0.7;
+  z-index: -1;
+}
+
+.landing-wave {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+  width: min(100%, 420px);
+  height: 240px;
+  padding: var(--space-3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-panel);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
+    rgba(10, 11, 16, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 32px 70px rgba(0, 0, 0, 0.32);
+}
+
+.landing-wave__bar {
+  position: relative;
+  display: block;
+  align-self: end;
+  width: 100%;
+  min-height: 28%;
+  height: var(--wave-bar-height);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(245, 247, 250, 0.92), rgba(0, 212, 255, 0.74) 55%, rgba(124, 92, 255, 0.72));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 28px rgba(0, 212, 255, 0.16),
+    0 0 40px rgba(124, 92, 255, 0.16);
+  transform-origin: center bottom;
+  animation: landing-wave 2.6s ease-in-out var(--wave-bar-delay) infinite;
+}
+
+.landing-wave__bar::after {
+  content: "";
+  position: absolute;
+  inset: 12% 28%;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.35);
+  filter: blur(4px);
+  opacity: 0.55;
+}
+
+.landing-highlights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.landing-highlight {
+  display: grid;
+  gap: var(--space-2);
+  min-height: 100%;
+  padding: var(--space-4);
+}
+
+.landing-highlight h2 {
+  font-size: 1.125rem;
+  line-height: 1.35;
+}
+
+.landing-highlight p {
+  line-height: 1.7;
+}
+
 .room-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -894,6 +1035,24 @@ svg {
   }
 }
 
+@keyframes landing-wave {
+  0%,
+  100% {
+    transform: scaleY(0.82);
+    opacity: 0.72;
+  }
+
+  45% {
+    transform: scaleY(1.08);
+    opacity: 1;
+  }
+
+  70% {
+    transform: scaleY(0.92);
+    opacity: 0.88;
+  }
+}
+
 @keyframes toast-slide-in {
   0% {
     opacity: 0;
@@ -930,6 +1089,28 @@ svg {
     --page-gutter: 24px;
   }
 
+  .landing-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .landing-copy {
+    max-width: 100%;
+  }
+
+  .landing-copy h1,
+  .landing-copy p {
+    max-width: none;
+  }
+
+  .landing-visual {
+    min-height: 320px;
+  }
+
+  .landing-highlights {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .site-main {
     padding-top: 104px;
   }
@@ -956,6 +1137,33 @@ svg {
   .page-shell {
     gap: var(--space-4);
     padding-block: var(--space-4) var(--space-6);
+  }
+
+  .landing-page {
+    gap: var(--space-4);
+  }
+
+  .landing-actions {
+    width: 100%;
+  }
+
+  .landing-actions .ui-button {
+    width: 100%;
+  }
+
+  .landing-visual {
+    min-height: 260px;
+    padding: var(--space-3);
+  }
+
+  .landing-wave {
+    gap: 10px;
+    height: 196px;
+    padding: var(--space-2);
+  }
+
+  .landing-highlights {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .site-header__inner {
@@ -1037,5 +1245,11 @@ svg {
   .live-badge__dot {
     animation: none !important;
     opacity: 1;
+  }
+
+  .landing-wave__bar {
+    animation: none !important;
+    transform: none;
+    opacity: 0.9;
   }
 }
