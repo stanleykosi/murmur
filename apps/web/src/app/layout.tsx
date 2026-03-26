@@ -9,37 +9,29 @@
 import "@/styles/globals.css";
 
 import { ClerkProvider } from "@clerk/nextjs";
-import { dark } from "@clerk/ui/themes";
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Newsreader, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 
 import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import ToastProvider from "@/components/ui/Toast";
+import { fluidClerkAppearance } from "@/lib/clerk-appearance";
 
-type ClerkTheme = NonNullable<
-  NonNullable<Parameters<typeof ClerkProvider>[0]["appearance"]>["theme"]
->;
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-display",
+});
 
-const inter = Inter({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-sans",
 });
 
-const jetBrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-mono",
-});
-
 const DEFAULT_DESCRIPTION =
   "Listen to live AI-hosted conversations in a real-time audio experience.";
-
-// Clerk's exported prebuilt themes are currently wider than the provider prop
-// under `exactOptionalPropertyTypes`, so we narrow the value once here.
-const clerkDarkTheme = dark as ClerkTheme;
 
 /**
  * Default metadata shared across the current Murmur frontend surface.
@@ -74,8 +66,8 @@ export default function RootLayout({
 }: Readonly<RootLayoutProps>) {
   return (
     <html lang="en">
-      <body className={[inter.variable, jetBrainsMono.variable].join(" ")}>
-        <ClerkProvider appearance={{ theme: clerkDarkTheme }}>
+      <body className={[newsreader.variable, spaceGrotesk.variable].join(" ")}>
+        <ClerkProvider appearance={fluidClerkAppearance}>
           <ToastProvider>
             <div className="site-shell">
               <Header />

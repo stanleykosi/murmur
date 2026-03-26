@@ -16,8 +16,13 @@ export default function Footer() {
   return (
     <footer className="site-footer">
       <div className="page-container site-footer__inner">
-        <p>&copy; {currentYear} Murmur</p>
-        <p>Powered by AI</p>
+        <div className="site-footer__meta">
+          <span className="section-label">The Fluid Architect</span>
+          <p>&copy; {currentYear} Murmur</p>
+        </div>
+        <p className="site-footer__tagline">
+          Live AI listening rooms framed in signal and shadow.
+        </p>
       </div>
     </footer>
   );

@@ -12,6 +12,8 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
+import SingularityLoader from "@/components/ui/SingularityLoader";
+
 /**
  * Supported Murmur button variants.
  */
@@ -96,10 +98,7 @@ export default function Button({
       {...rest}
     >
       {loading ? (
-        <span
-          className="ui-button__spinner"
-          aria-hidden="true"
-        />
+        <SingularityLoader className="ui-button__spinner" />
       ) : null}
       <span
         className={joinClassNames(

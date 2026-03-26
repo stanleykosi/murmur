@@ -41,7 +41,7 @@ function joinClassNames(
  * @returns A presentational skeleton element.
  */
 export default function Skeleton({
-  borderRadius = "var(--radius-soft)",
+  borderRadius = "2rem 1rem 2rem 1rem",
   className,
   height = "1rem",
   style,

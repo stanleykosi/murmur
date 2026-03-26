@@ -27,7 +27,7 @@ export default async function Header() {
           <span className="site-brand__mark" aria-hidden="true">
             M
           </span>
-          <span>Murmur</span>
+          <span className="site-brand__wordmark">Murmur</span>
         </Link>
 
         <nav className="site-nav" aria-label="Primary">
