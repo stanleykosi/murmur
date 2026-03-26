@@ -133,11 +133,14 @@ export default function Card(props: Readonly<CardProps>) {
     }
   }
 
+  const resolvedOnKeyDown =
+    onClick !== undefined || onKeyDown !== undefined ? handleKeyDown : undefined;
+
   return (
     <div
       className={cardClassName}
       onClick={onClick}
-      onKeyDown={handleKeyDown}
+      onKeyDown={resolvedOnKeyDown}
       role={onClick !== undefined ? role ?? "button" : role}
       tabIndex={onClick !== undefined ? tabIndex ?? 0 : tabIndex}
       {...rest}

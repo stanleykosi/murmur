@@ -1,24 +1,60 @@
+"use client";
+
 /**
  * Persistent top navigation for the Murmur frontend.
  *
- * This server component reads the authenticated Clerk session directly from
- * the App Router request context so the shared site chrome can render the
- * correct auth affordances and admin navigation without fetching app data.
+ * This client component reads Clerk auth state in the browser so static and
+ * ISR routes such as `/lobby` can keep their cached rendering behavior
+ * without opting the shared app shell into request-time server auth.
  */
 
-import { UserButton } from "@clerk/nextjs";
-import { auth } from "@clerk/nextjs/server";
+import { Show, UserButton, useAuth } from "@clerk/nextjs";
 import Link from "next/link";
+
+/**
+ * Minimal record guard used to safely inspect Clerk session claims.
+ *
+ * @param value - Candidate value to narrow.
+ * @returns True when the value is a non-null object.
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+type SessionClaims = ReturnType<typeof useAuth>["sessionClaims"];
+
+/**
+ * Extracts the custom Murmur role stored in Clerk session metadata.
+ *
+ * Clerk's auth helpers expose session claims as a generic payload, so this
+ * function validates the nested metadata shape before reading the `role`
+ * property used for admin navigation.
+ *
+ * @param sessionClaims - Clerk session claims returned by `useAuth()`.
+ * @returns The metadata role string when available, otherwise `null`.
+ */
+function getSessionRole(sessionClaims: SessionClaims): string | null {
+  if (!isRecord(sessionClaims)) {
+    return null;
+  }
+
+  const metadata = sessionClaims.metadata;
+
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  return typeof metadata.role === "string" ? metadata.role : null;
+}
 
 /**
  * Renders the fixed site header with navigation and auth controls.
  *
  * @returns The canonical Murmur top navigation bar.
  */
-export default async function Header() {
-  const { userId, sessionClaims } = await auth();
-  const isSignedIn = userId !== null;
-  const isAdmin = sessionClaims?.metadata?.role === "admin";
+export default function Header() {
+  const { isLoaded, sessionClaims } = useAuth();
+  const isAdmin = isLoaded && getSessionRole(sessionClaims) === "admin";
 
   return (
     <header className="site-header">
@@ -42,13 +78,14 @@ export default async function Header() {
         </nav>
 
         <div className="site-header__actions">
-          {isSignedIn ? (
+          <Show when="signed-in">
             <UserButton />
-          ) : (
+          </Show>
+          <Show when="signed-out">
             <Link href="/sign-in" className="site-nav__link site-nav__link--cta">
               Sign in
             </Link>
-          )}
+          </Show>
         </div>
       </div>
     </header>
