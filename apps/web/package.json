@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.7",
+    "@clerk/ui": "^1.2.4",
     "@livekit/components-react": "^2.9.20",
     "@murmur/shared": "workspace:*",
     "centrifuge": "^5.5.3",

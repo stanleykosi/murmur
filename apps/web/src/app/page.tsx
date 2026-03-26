@@ -13,13 +13,16 @@
  */
 export default function HomePage() {
   return (
-    <main>
+    <section
+      className="glass-card fade-up"
+      style={{ padding: "var(--space-4)" }}
+    >
       <h1>Murmur</h1>
       <p>
         The Next.js frontend scaffold is in place. The room lobby, live audio
         experience, and shared design system land in the next implementation
         steps.
       </p>
-    </main>
+    </section>
   );
 }
