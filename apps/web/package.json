@@ -1,0 +1,33 @@
+{
+  "//": "Workspace manifest for the Murmur Next.js frontend scaffold.",
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Next.js 16 App Router frontend workspace for Murmur.",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "pretypecheck": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^7.0.7",
+    "@livekit/components-react": "^2.9.20",
+    "@murmur/shared": "workspace:*",
+    "centrifuge": "^5.5.3",
+    "livekit-client": "^2.18.0",
+    "next": "^16.2.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.6.3"
+  }
+}
