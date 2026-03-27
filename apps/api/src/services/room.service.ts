@@ -10,6 +10,8 @@
 
 import type {
   AgentRole,
+  AdminAgentSummary,
+  AdminRoom,
   AgentSummary,
   Room,
   RoomFormat,
@@ -234,6 +236,24 @@ function mapAssignedAgentsToSummaries(
 }
 
 /**
+ * Converts the nested room-agent rows into the admin-facing summary shape that
+ * includes the persisted muted state sourced from Redis.
+ *
+ * @param assignedAgents - Persisted room-agent relations with nested agents.
+ * @param mutedAgentIds - Agent IDs currently muted for the room.
+ * @returns Stable admin agent summaries ordered with the host first.
+ */
+function mapAssignedAgentsToAdminSummaries(
+  assignedAgents: RoomWithAssignedAgents["assignedAgents"],
+  mutedAgentIds: ReadonlySet<string>,
+): AdminAgentSummary[] {
+  return mapAssignedAgentsToSummaries(assignedAgents).map((agentSummary) => ({
+    ...agentSummary,
+    muted: mutedAgentIds.has(agentSummary.id),
+  }));
+}
+
+/**
  * Maps a persisted room record into the shared transport shape consumed by the
  * web application.
  *
@@ -247,6 +267,37 @@ function mapRoomRecordToRoom(
 ): Room {
   return {
     agents: mapAssignedAgentsToSummaries(roomRecord.assignedAgents),
+    createdAt: roomRecord.createdAt,
+    createdBy: roomRecord.createdBy,
+    endedAt: roomRecord.endedAt,
+    format: roomRecord.format,
+    id: roomRecord.id,
+    listenerCount,
+    status: roomRecord.status,
+    title: roomRecord.title,
+    topic: roomRecord.topic,
+  };
+}
+
+/**
+ * Maps a persisted room record into the admin transport shape consumed by the
+ * web dashboard.
+ *
+ * @param roomRecord - Persisted room row with nested agent assignments.
+ * @param listenerCount - Real-time active listener count from Redis.
+ * @param mutedAgentIds - Set of agent IDs muted for the current room.
+ * @returns The serialized admin room payload returned by the API.
+ */
+function mapRoomRecordToAdminRoom(
+  roomRecord: RoomWithAssignedAgents,
+  listenerCount: number,
+  mutedAgentIds: ReadonlySet<string>,
+): AdminRoom {
+  return {
+    agents: mapAssignedAgentsToAdminSummaries(
+      roomRecord.assignedAgents,
+      mutedAgentIds,
+    ),
     createdAt: roomRecord.createdAt,
     createdBy: roomRecord.createdBy,
     endedAt: roomRecord.endedAt,
@@ -306,6 +357,82 @@ async function getListenerCountsByRoomId(
     countsByRoomId.set(roomId, count);
     return countsByRoomId;
   }, new Map<string, number>());
+}
+
+/**
+ * Resolves muted-agent membership for multiple rooms in one Redis pipeline so
+ * the admin dashboard can render truthful mute state after refresh.
+ *
+ * @param roomIds - Room IDs whose muted-agent sets should be loaded.
+ * @returns A lookup of room ID to muted agent ID set.
+ */
+async function getMutedAgentIdsByRoomId(
+  roomIds: ReadonlyArray<string>,
+): Promise<Map<string, Set<string>>> {
+  if (roomIds.length === 0) {
+    return new Map<string, Set<string>>();
+  }
+
+  const pipeline = redis.pipeline();
+
+  for (const roomId of roomIds) {
+    pipeline.smembers(`room:${roomId}:muted`);
+  }
+
+  const results = await pipeline.exec();
+
+  if (results === null) {
+    throw new Error("Redis pipeline for muted-agent lookups returned no results.");
+  }
+
+  return roomIds.reduce((mutedByRoomId, roomId, index) => {
+    const result = results[index];
+
+    if (!result) {
+      throw new Error(`Redis did not return a muted-agent set for room "${roomId}".`);
+    }
+
+    const [error, members] = result;
+
+    if (error) {
+      throw error;
+    }
+
+    if (!Array.isArray(members) || !members.every((member) => typeof member === "string")) {
+      throw new Error(
+        `Redis returned an unexpected muted-agent payload for room "${roomId}".`,
+      );
+    }
+
+    mutedByRoomId.set(roomId, new Set(members));
+    return mutedByRoomId;
+  }, new Map<string, Set<string>>());
+}
+
+/**
+ * Loads the persisted room rows used by both the public and admin room-listing
+ * flows so their ordering and database projection stay aligned.
+ *
+ * @param status - Optional room-status filter.
+ * @returns The matching rooms ordered by creation time descending.
+ */
+async function getRoomRecordsWithAssignedAgents(
+  status?: RoomStatus,
+): Promise<RoomWithAssignedAgents[]> {
+  return db.query.rooms.findMany({
+    orderBy: (roomTable, { desc }) => [desc(roomTable.createdAt)],
+    where:
+      status === undefined
+        ? undefined
+        : eq(rooms.status, status),
+    with: {
+      assignedAgents: {
+        with: {
+          agent: true,
+        },
+      },
+    },
+  });
 }
 
 /**
@@ -393,20 +520,7 @@ async function getJoinableRoom(roomId: string): Promise<RoomRecord> {
  * @returns The matching rooms ordered by most recent creation time first.
  */
 export async function listRooms(status?: RoomStatus): Promise<Room[]> {
-  const roomRecords = await db.query.rooms.findMany({
-    orderBy: (roomTable, { desc }) => [desc(roomTable.createdAt)],
-    where:
-      status === undefined
-        ? undefined
-        : eq(rooms.status, status),
-    with: {
-      assignedAgents: {
-        with: {
-          agent: true,
-        },
-      },
-    },
-  });
+  const roomRecords = await getRoomRecordsWithAssignedAgents(status);
   const listenerCountsByRoomId = await getListenerCountsByRoomId(
     roomRecords.map((roomRecord) => roomRecord.id),
   );
@@ -415,6 +529,30 @@ export async function listRooms(status?: RoomStatus): Promise<Room[]> {
     mapRoomRecordToRoom(
       roomRecord,
       listenerCountsByRoomId.get(roomRecord.id) ?? 0,
+    ),
+  );
+}
+
+/**
+ * Lists rooms for the admin dashboard with real-time listener counts and
+ * persisted per-agent mute state.
+ *
+ * @returns The matching admin room payloads ordered by most recent creation
+ * time first.
+ */
+export async function listAdminRooms(): Promise<AdminRoom[]> {
+  const roomRecords = await getRoomRecordsWithAssignedAgents();
+  const roomIds = roomRecords.map((roomRecord) => roomRecord.id);
+  const [listenerCountsByRoomId, mutedAgentIdsByRoomId] = await Promise.all([
+    getListenerCountsByRoomId(roomIds),
+    getMutedAgentIdsByRoomId(roomIds),
+  ]);
+
+  return roomRecords.map((roomRecord) =>
+    mapRoomRecordToAdminRoom(
+      roomRecord,
+      listenerCountsByRoomId.get(roomRecord.id) ?? 0,
+      mutedAgentIdsByRoomId.get(roomRecord.id) ?? new Set<string>(),
     ),
   );
 }

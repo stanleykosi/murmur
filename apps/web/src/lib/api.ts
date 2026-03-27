@@ -12,7 +12,9 @@ import { AGENT_ROLES, ROOM_FORMATS, ROOM_STATUSES } from "@murmur/shared";
 
 import type {
   AgentSummary,
+  AdminAgentSummary,
   AdminAgentMutationResponse,
+  AdminRoom,
   ApiAuthContext,
   ApiErrorShape,
   EndRoomResponse,
@@ -57,7 +59,7 @@ interface RoomDetailsResponse {
  * `GET /api/admin/rooms` response contract.
  */
 interface AdminRoomsResponse {
-  rooms: Room[];
+  rooms: AdminRoom[];
 }
 
 /**
@@ -625,6 +627,23 @@ function parseAgentSummary(
 }
 
 /**
+ * Validates an admin agent summary nested inside the admin room payload.
+ *
+ * @param payload - Candidate admin agent summary value.
+ * @param statusCode - HTTP status code of the response being validated.
+ * @returns A typed admin agent summary object.
+ */
+function parseAdminAgentSummary(
+  payload: unknown,
+  statusCode: number,
+): AdminAgentSummary {
+  return {
+    ...parseAgentSummary(payload, statusCode),
+    muted: getRequiredBooleanField(payload, "muted", statusCode),
+  };
+}
+
+/**
  * Validates an array of serialized room-agent summaries.
  *
  * @param payload - Candidate agent-summary array.
@@ -639,6 +658,24 @@ function parseAgentSummaryArray(
 ): AgentSummary[] {
   return getRequiredArrayField(payload, field, statusCode).map((agentPayload) =>
     parseAgentSummary(agentPayload, statusCode),
+  );
+}
+
+/**
+ * Validates an array of serialized admin agent summaries.
+ *
+ * @param payload - Candidate admin agent-summary array.
+ * @param field - Required top-level field name.
+ * @param statusCode - HTTP status code of the response being validated.
+ * @returns A typed array of admin agent summaries.
+ */
+function parseAdminAgentSummaryArray(
+  payload: unknown,
+  field: string,
+  statusCode: number,
+): AdminAgentSummary[] {
+  return getRequiredArrayField(payload, field, statusCode).map((agentPayload) =>
+    parseAdminAgentSummary(agentPayload, statusCode),
   );
 }
 
@@ -695,6 +732,25 @@ function parseRoomRecord(payload: unknown, statusCode: number): Room {
 }
 
 /**
+ * Validates an admin room object returned by the Fastify API.
+ *
+ * @param payload - Candidate admin room payload.
+ * @param statusCode - HTTP status code of the response being validated.
+ * @returns A typed admin room object.
+ */
+function parseAdminRoomRecord(
+  payload: unknown,
+  statusCode: number,
+): AdminRoom {
+  const baseRoom = parseRoomRecord(payload, statusCode);
+
+  return {
+    ...baseRoom,
+    agents: parseAdminAgentSummaryArray(payload, "agents", statusCode),
+  };
+}
+
+/**
  * Validates the `GET /api/rooms` and `GET /api/admin/rooms` response payload.
  *
  * @param payload - Parsed JSON payload returned by the API.
@@ -707,6 +763,22 @@ function parseRoomsListResponse(
 ): Room[] {
   return getRequiredArrayField(payload, "rooms", statusCode).map((roomPayload) =>
     parseRoomRecord(roomPayload, statusCode),
+  );
+}
+
+/**
+ * Validates the `GET /api/admin/rooms` response payload.
+ *
+ * @param payload - Parsed JSON payload returned by the API.
+ * @param statusCode - HTTP status code of the response being validated.
+ * @returns The admin rooms array.
+ */
+function parseAdminRoomsListResponse(
+  payload: unknown,
+  statusCode: number,
+): AdminRoom[] {
+  return getRequiredArrayField(payload, "rooms", statusCode).map((roomPayload) =>
+    parseAdminRoomRecord(roomPayload, statusCode),
   );
 }
 
@@ -970,7 +1042,7 @@ export async function leaveRoom(
  */
 export async function fetchAdminRooms(
   auth: ApiAuthContext,
-): Promise<Room[]> {
+): Promise<AdminRoom[]> {
   const payload = await requestJson<AdminRoomsResponse>(
     {
       path: "/api/admin/rooms",
@@ -978,7 +1050,7 @@ export async function fetchAdminRooms(
       cache: "no-store",
     },
     (responsePayload, statusCode) => ({
-      rooms: parseRoomsListResponse(responsePayload, statusCode),
+      rooms: parseAdminRoomsListResponse(responsePayload, statusCode),
     }),
   );
 

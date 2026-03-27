@@ -16,7 +16,7 @@ import { authPreHandler } from "../middleware/auth.js";
 import { redis } from "../lib/redis.js";
 import { publishRoomEnded } from "../services/centrifugo.service.js";
 import { deleteRoom as deleteLiveKitRoom } from "../services/livekit.service.js";
-import { endRoom, getRoomById, listRooms } from "../services/room.service.js";
+import { endRoom, getRoomById, listAdminRooms } from "../services/room.service.js";
 
 const ROOM_END_CLEANUP_ERROR_CODE = "room_end_cleanup_failed";
 
@@ -202,7 +202,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       preHandler: adminPreHandlers,
     },
     async () => ({
-      rooms: await listRooms(),
+      rooms: await listAdminRooms(),
     }),
   );
 

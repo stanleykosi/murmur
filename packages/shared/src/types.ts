@@ -94,6 +94,14 @@ export interface AgentSummary {
 }
 
 /**
+ * Extended agent summary used by the admin dashboard to reflect whether an
+ * assigned agent is currently muted in Redis for the room being managed.
+ */
+export interface AdminAgentSummary extends AgentSummary {
+  muted: boolean;
+}
+
+/**
  * API-facing room model including derived listener counts and assigned agents.
  */
 export interface Room {
@@ -107,6 +115,14 @@ export interface Room {
   endedAt: string | null;
   listenerCount: number;
   agents: AgentSummary[];
+}
+
+/**
+ * Admin-facing room model that includes persisted per-agent mute state while
+ * preserving the public room contract for listener-facing surfaces.
+ */
+export interface AdminRoom extends Omit<Room, "agents"> {
+  agents: AdminAgentSummary[];
 }
 
 /**

@@ -27,7 +27,7 @@ const authContext = {
   userRole: "admin" as const,
 };
 
-const listRoomsMock = vi.fn();
+const listAdminRoomsMock = vi.fn();
 const getRoomByIdMock = vi.fn();
 const endRoomMock = vi.fn();
 const deleteRoomMock = vi.fn();
@@ -61,7 +61,7 @@ vi.mock("../middleware/auth.js", () => ({
 vi.mock("../services/room.service.js", () => ({
   endRoom: endRoomMock,
   getRoomById: getRoomByIdMock,
-  listRooms: listRoomsMock,
+  listAdminRooms: listAdminRoomsMock,
 }));
 
 vi.mock("../services/livekit.service.js", () => ({
@@ -141,6 +141,32 @@ function createRoomFixture(
   };
 }
 
+/**
+ * Creates the admin-room fixture returned by the room-list endpoint, including
+ * per-agent muted state derived from Redis.
+ *
+ * @param status - Room lifecycle status for the fixture.
+ * @param listenerCount - Listener count to embed in the fixture.
+ * @param mutedAgentIds - Agent IDs that should be marked muted in the fixture.
+ * @returns A deterministic admin room fixture for room-list tests.
+ */
+function createAdminRoomFixture(
+  status: "live" | "ended" = "live",
+  listenerCount = 12,
+  mutedAgentIds: ReadonlyArray<string> = [],
+) {
+  const room = createRoomFixture(status, listenerCount);
+  const mutedSet = new Set(mutedAgentIds);
+
+  return {
+    ...room,
+    agents: room.agents.map((agent) => ({
+      ...agent,
+      muted: mutedSet.has(agent.id),
+    })),
+  };
+}
+
 beforeAll(async () => {
   Object.assign(process.env, REQUIRED_API_ENV, {
     NODE_ENV: "test",
@@ -168,7 +194,7 @@ beforeEach(() => {
   deleteRoomMock.mockReset();
   endRoomMock.mockReset();
   getRoomByIdMock.mockReset();
-  listRoomsMock.mockReset();
+  listAdminRoomsMock.mockReset();
   publishRoomEndedMock.mockReset();
   redisDelMock.mockReset();
   redisSaddMock.mockReset();
@@ -181,10 +207,12 @@ describe("adminRoutes", () => {
    */
   it("lists all rooms for an admin", async () => {
     const app = buildServer();
-    const liveRoom = createRoomFixture("live", 12);
-    const endedRoom = createRoomFixture("ended", 0);
+    const liveRoom = createAdminRoomFixture("live", 12, [
+      "9353f880-3777-4cc2-9d34-13c5cd82d53d",
+    ]);
+    const endedRoom = createAdminRoomFixture("ended", 0);
 
-    listRoomsMock.mockResolvedValue([liveRoom, endedRoom]);
+    listAdminRoomsMock.mockResolvedValue([liveRoom, endedRoom]);
 
     await app.ready();
 
@@ -194,7 +222,7 @@ describe("adminRoutes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(listRoomsMock).toHaveBeenCalledTimes(1);
+    expect(listAdminRoomsMock).toHaveBeenCalledTimes(1);
     expect(response.json()).toEqual({
       rooms: [liveRoom, endedRoom],
     });
@@ -218,7 +246,7 @@ describe("adminRoutes", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(listRoomsMock).not.toHaveBeenCalled();
+    expect(listAdminRoomsMock).not.toHaveBeenCalled();
     expect(response.json()).toMatchObject({
       error: {
         code: "forbidden",
