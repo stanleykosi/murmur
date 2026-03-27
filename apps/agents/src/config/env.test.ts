@@ -29,6 +29,7 @@ function createValidEnvironment(
     CENTRIFUGO_API_URL: "http://localhost:8000",
     CENTRIFUGO_API_KEY: "centrifugo-api-key",
     OPENROUTER_API_KEY: "sk-or-example",
+    OPENROUTER_DEFAULT_MAX_TOKENS: "450",
     CARTESIA_API_KEY: "cartesia-key",
     ELEVENLABS_API_KEY: "elevenlabs-key",
     SENTRY_DSN: "https://public@example.ingest.sentry.io/1",
@@ -68,18 +69,20 @@ afterEach(() => {
 describe("agent env", () => {
   /**
    * Verifies the module trims string inputs and applies the default
-   * OpenRouter model when the operator omits it.
+   * OpenRouter model and token budget when the operator omits them.
    */
-  it("parses a valid environment and applies the default model", async () => {
+  it("parses a valid environment and applies the default model and max tokens", async () => {
     const environment = createValidEnvironment({
       DATABASE_URL: "  postgresql://postgres:secret@example.com:5432/postgres  ",
       OPENROUTER_DEFAULT_MODEL: undefined,
+      OPENROUTER_DEFAULT_MAX_TOKENS: undefined,
     });
     const module = await importEnvModule(environment);
 
     expect(module.env).toMatchObject({
       DATABASE_URL: "postgresql://postgres:secret@example.com:5432/postgres",
-      OPENROUTER_DEFAULT_MODEL: "openai/gpt-4o",
+      OPENROUTER_DEFAULT_MODEL: module.DEFAULT_OPENROUTER_MODEL,
+      OPENROUTER_DEFAULT_MAX_TOKENS: module.DEFAULT_OPENROUTER_MAX_TOKENS,
     });
   });
 
@@ -96,11 +99,12 @@ describe("agent env", () => {
           DATABASE_URL: "not-a-url",
           REDIS_URL: " ",
           OPENROUTER_API_KEY: undefined,
+          OPENROUTER_DEFAULT_MAX_TOKENS: "0",
           SENTRY_DSN: "still-not-a-url",
         }),
       ),
     ).toThrowError(
-      /DATABASE_URL|REDIS_URL|OPENROUTER_API_KEY|SENTRY_DSN/,
+      /DATABASE_URL|REDIS_URL|OPENROUTER_API_KEY|OPENROUTER_DEFAULT_MAX_TOKENS|SENTRY_DSN/,
     );
   });
 });

@@ -12,6 +12,16 @@ import "dotenv/config";
 import { z } from "zod";
 
 /**
+ * Canonical fallback model for OpenRouter-backed agent generation.
+ */
+export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o";
+
+/**
+ * Canonical fallback token budget for a single generated room turn.
+ */
+export const DEFAULT_OPENROUTER_MAX_TOKENS = 300;
+
+/**
  * Builds a trimmed, required non-empty string validator for secret-like values.
  *
  * @param label - Human-readable variable name used in validation messages.
@@ -44,6 +54,39 @@ export function requiredUrl(label: string): z.ZodType<string> {
   }, `${label} must be a valid URL.`);
 }
 
+/**
+ * Builds an optional positive-integer validator with a numeric default.
+ *
+ * Environment variables arrive as strings, so this helper trims, parses, and
+ * validates them into a number that downstream runtime code can consume
+ * directly without repeating coercion logic.
+ *
+ * @param label - Human-readable variable name used in validation messages.
+ * @param defaultValue - Numeric fallback applied when the variable is omitted.
+ * @returns A Zod schema that yields a validated positive integer.
+ */
+export function optionalPositiveInteger(
+  label: string,
+  defaultValue: number,
+): z.ZodType<number, z.ZodTypeDef, unknown> {
+  return z.preprocess((value) => {
+    if (value === undefined) {
+      return defaultValue;
+    }
+
+    if (typeof value === "string") {
+      const trimmedValue = value.trim();
+
+      return trimmedValue.length > 0 ? Number(trimmedValue) : Number.NaN;
+    }
+
+    return value;
+  }, z.number({
+    invalid_type_error: `${label} must be a positive integer.`,
+  }).int(`${label} must be a positive integer.`)
+    .positive(`${label} must be a positive integer.`));
+}
+
 const AgentEnvSchema = z.object({
   DATABASE_URL: requiredUrl("DATABASE_URL"),
   REDIS_URL: requiredUrl("REDIS_URL"),
@@ -61,7 +104,11 @@ const AgentEnvSchema = z.object({
     .pipe(
       z.string().min(1, "OPENROUTER_DEFAULT_MODEL cannot be empty."),
     )
-    .default("openai/gpt-4o"),
+    .default(DEFAULT_OPENROUTER_MODEL),
+  OPENROUTER_DEFAULT_MAX_TOKENS: optionalPositiveInteger(
+    "OPENROUTER_DEFAULT_MAX_TOKENS",
+    DEFAULT_OPENROUTER_MAX_TOKENS,
+  ),
   CARTESIA_API_KEY: requiredString("CARTESIA_API_KEY"),
   ELEVENLABS_API_KEY: requiredString("ELEVENLABS_API_KEY"),
   SENTRY_DSN: requiredUrl("SENTRY_DSN"),
