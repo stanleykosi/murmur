@@ -22,12 +22,13 @@ export type ConnectionState =
 /**
  * Minimal authentication contract required by protected frontend API calls.
  *
- * Client components can satisfy this with `useAuth().getToken`, while server
- * components can pass through the `getToken` function returned by Clerk's
- * server auth helper.
+ * Client and server components can satisfy this either with a Clerk `getToken`
+ * function or with a previously resolved session token when a request must be
+ * dispatched during unload-safe cleanup.
  */
 export interface ApiAuthContext {
-  getToken: () => Promise<string | null>;
+  getToken?: () => Promise<string | null>;
+  token?: string | null;
 }
 
 /**

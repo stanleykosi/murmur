@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Error boundary for the room scaffold route.
+ * Error boundary for the live-room route.
  *
- * Direct navigation can reach ended, invalid, or otherwise unavailable room
- * IDs. This boundary keeps those failures localized and gives listeners a
- * simple escape hatch back to the lobby.
+ * Direct navigation can still reach missing or ended room IDs. This boundary
+ * keeps those failures localized and gives listeners a fast path back to the
+ * lobby without collapsing the surrounding app shell.
  */
 
 import Link from "next/link";
@@ -35,14 +35,14 @@ export default function RoomErrorPage({
   }, [error]);
 
   return (
-    <div className="page-shell room-overview-page">
+    <div className="page-shell room-live-page">
       <section className="room-error glass-card fade-up">
         <div className="room-error__copy">
           <span className="section-label">Room Unavailable</span>
-          <h1>Room not found or no longer live</h1>
+          <h1>Room not found or has ended</h1>
           <p>
-            This room could not be loaded as an active Murmur conversation. Retry
-            the lookup or head back to the lobby to choose another live room.
+            This Murmur conversation is no longer available as a live room.
+            Retry the lookup or return to the lobby to choose another room.
           </p>
         </div>
 

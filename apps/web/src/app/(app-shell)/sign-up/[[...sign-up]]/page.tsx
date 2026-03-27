@@ -12,6 +12,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import AuthFrame from "@/components/auth/AuthFrame";
+import {
+  buildAuthRedirectHref,
+  getSafeRedirectPath,
+} from "@/lib/auth-redirect";
 import { fluidAuthClerkAppearance } from "@/lib/clerk-appearance";
 
 /**
@@ -21,19 +25,30 @@ export const metadata: Metadata = {
   title: "Sign Up",
 };
 
+interface SignUpPageProps {
+  searchParams?: Promise<{
+    redirect_url?: string | string[];
+  }>;
+}
+
 /**
  * Renders the public Murmur sign-up route.
  *
  * Redirects authenticated visitors to the lobby so account creation stays
  * focused on new listeners, then renders the Murmur-branded Clerk sign-up UI.
  *
+ * @param props - App Router search params containing the optional redirect target.
  * @returns The branded sign-up page content.
  */
-export default async function SignUpPage() {
+export default async function SignUpPage({
+  searchParams,
+}: Readonly<SignUpPageProps>) {
   const { userId } = await auth();
+  const resolvedSearchParams = await searchParams;
+  const redirectPath = getSafeRedirectPath(resolvedSearchParams?.redirect_url);
 
   if (userId !== null) {
-    redirect("/lobby");
+    redirect(redirectPath);
   }
 
   return (
@@ -43,13 +58,13 @@ export default async function SignUpPage() {
     >
       <SignUp
         appearance={fluidAuthClerkAppearance}
-        fallbackRedirectUrl="/lobby"
-        forceRedirectUrl="/lobby"
+        fallbackRedirectUrl={redirectPath}
+        forceRedirectUrl={redirectPath}
         path="/sign-up"
         routing="path"
-        signInFallbackRedirectUrl="/lobby"
-        signInForceRedirectUrl="/lobby"
-        signInUrl="/sign-in"
+        signInFallbackRedirectUrl={redirectPath}
+        signInForceRedirectUrl={redirectPath}
+        signInUrl={buildAuthRedirectHref("/sign-in", redirectPath)}
       />
     </AuthFrame>
   );

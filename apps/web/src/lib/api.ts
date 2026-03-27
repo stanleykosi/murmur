@@ -4,7 +4,8 @@
  * This module provides the canonical frontend data-access layer for room and
  * admin requests. It is intentionally isomorphic so both App Router server
  * components and client components can call the same helpers, with protected
- * requests receiving a Clerk token getter via dependency injection.
+ * requests receiving either a Clerk token getter or a previously resolved
+ * bearer token via dependency injection.
  */
 
 import { AGENT_ROLES, ROOM_FORMATS, ROOM_STATUSES } from "@murmur/shared";
@@ -35,6 +36,7 @@ interface JsonRequestOptions {
   body?: unknown;
   auth?: ApiAuthContext;
   cache?: RequestCache;
+  keepalive?: boolean;
 }
 
 /**
@@ -188,6 +190,22 @@ function normalizeRequiredString(value: unknown, label: string): string {
 }
 
 /**
+ * Normalizes an optional bearer token supplied by the caller.
+ *
+ * @param value - Candidate token string or nullable value.
+ * @returns The trimmed token or `null` when the value is absent/blank.
+ */
+function normalizeOptionalToken(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+
+  return normalizedValue.length > 0 ? normalizedValue : null;
+}
+
+/**
  * Creates a typed client error for malformed responses and local request issues.
  *
  * @param message - Human-readable description of the failure.
@@ -292,14 +310,14 @@ async function throwApiError(response: Response): Promise<never> {
 /**
  * Resolves the authorization header value for a protected request.
  *
- * @param auth - Auth context supplying the Clerk session token getter.
+ * @param auth - Auth context supplying either a resolved bearer token or a Clerk token getter.
  * @returns A fully formed Bearer authorization header value.
  * @throws {ApiClientError} When the auth context is missing or produces no token.
  */
 async function getAuthorizationHeader(auth: ApiAuthContext | undefined): Promise<string> {
-  if (!auth || typeof auth.getToken !== "function") {
+  if (!auth) {
     throw createApiClientError(
-      "Protected API requests require an auth context with a getToken() function.",
+      "Protected API requests require an auth context with either a token or getToken() function.",
       {
         code: "missing_auth_context",
         statusCode: 401,
@@ -308,9 +326,35 @@ async function getAuthorizationHeader(auth: ApiAuthContext | undefined): Promise
     );
   }
 
-  const token = await auth.getToken();
-  const normalizedToken =
-    typeof token === "string" ? token.trim() : null;
+  if ("token" in auth) {
+    const normalizedToken = normalizeOptionalToken(auth.token);
+
+    if (!normalizedToken) {
+      throw createApiClientError(
+        "Protected API requests require a valid Clerk session token.",
+        {
+          code: "missing_auth_token",
+          statusCode: 401,
+          requestId: UNKNOWN_REQUEST_ID,
+        },
+      );
+    }
+
+    return `Bearer ${normalizedToken}`;
+  }
+
+  if (typeof auth.getToken !== "function") {
+    throw createApiClientError(
+      "Protected API requests require an auth context with either a token or getToken() function.",
+      {
+        code: "missing_auth_context",
+        statusCode: 401,
+        requestId: UNKNOWN_REQUEST_ID,
+      },
+    );
+  }
+
+  const normalizedToken = normalizeOptionalToken(await auth.getToken());
 
   if (!normalizedToken) {
     throw createApiClientError(
@@ -778,6 +822,10 @@ async function requestJson<T>(
     requestInit.cache = options.cache;
   }
 
+  if (options.keepalive !== undefined) {
+    requestInit.keepalive = options.keepalive;
+  }
+
   if (options.auth !== undefined) {
     headers.set("Authorization", await getAuthorizationHeader(options.auth));
   }
@@ -868,7 +916,7 @@ export async function fetchRoom(id: string): Promise<Room> {
  * Completes the protected listener join handshake for a room.
  *
  * @param id - UUID of the room being joined.
- * @param auth - Clerk token getter used for authorization.
+ * @param auth - Resolved bearer token or Clerk token getter used for authorization.
  * @returns The room payload plus LiveKit and Centrifugo tokens.
  * @throws {Error | ApiClientError} When the identifier is invalid or the request fails.
  */
@@ -892,7 +940,7 @@ export async function joinRoom(
  * Leaves a room for the authenticated listener.
  *
  * @param id - UUID of the room being left.
- * @param auth - Clerk token getter used for authorization.
+ * @param auth - Resolved bearer token or Clerk token getter used for authorization.
  * @returns The updated listener count for the room.
  * @throws {Error | ApiClientError} When the identifier is invalid or the request fails.
  */
@@ -907,6 +955,7 @@ export async function leaveRoom(
       path: `/api/rooms/${encodeURIComponent(roomId)}/leave`,
       method: "POST",
       auth,
+      keepalive: true,
     },
     parseLeaveRoomResponse,
   );
