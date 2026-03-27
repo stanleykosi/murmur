@@ -6,14 +6,6 @@
       "ES2022"
     ],
     "baseUrl": ".",
-    "paths": {
-      "@murmur/shared": [
-        "packages/shared/src/index.ts"
-      ],
-      "@murmur/shared/*": [
-        "packages/shared/src/*"
-      ]
-    },
     "strict": true,
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true,

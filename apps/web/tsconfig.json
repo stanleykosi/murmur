@@ -6,12 +6,6 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ],
-      "@murmur/shared": [
-        "../../packages/shared/src/index.ts"
-      ],
-      "@murmur/shared/*": [
-        "../../packages/shared/src/*"
       ]
     },
     "lib": [
