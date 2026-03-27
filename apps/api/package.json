@@ -6,7 +6,7 @@
   "type": "module",
   "description": "Fastify API service for Murmur, including runtime configuration, logging, Redis connectivity, and HTTP bootstrap.",
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=20.11.0 <21"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Root workspace manifest for the Murmur monorepo, including shared tooling and task orchestration.",
   "engines": {
-    "node": ">=20.11.0",
+    "node": ">=20.11.0 <21",
     "pnpm": ">=9.0.0"
   },
   "packageManager": "pnpm@9.15.1",

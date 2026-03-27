@@ -5,7 +5,7 @@
   "private": true,
   "description": "Next.js 16 App Router frontend workspace for Murmur.",
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=20.11.0 <21"
   },
   "scripts": {
     "dev": "next dev",
