@@ -6,7 +6,7 @@
   "type": "module",
   "description": "Fastify API service for Murmur, including runtime configuration, logging, Redis connectivity, and HTTP bootstrap.",
   "engines": {
-    "node": ">=20.11.0 <21"
+    "node": ">=24.0.0 <26"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.8",
-    "@types/node": "^22.10.2",
+    "@types/node": "^24.0.0",
     "@types/pg": "^8.11.10",
     "drizzle-kit": "0.31.10",
     "tsx": "^4.19.2",

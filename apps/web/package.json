@@ -5,7 +5,7 @@
   "private": true,
   "description": "Next.js 16 App Router frontend workspace for Murmur.",
   "engines": {
-    "node": ">=20.11.0 <21"
+    "node": ">=24.0.0 <26"
   },
   "scripts": {
     "dev": "next dev",
@@ -26,7 +26,7 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^24.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "typescript": "^5.6.3"
