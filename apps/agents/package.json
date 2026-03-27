@@ -1,0 +1,36 @@
+{
+  "//": "Workspace manifest for the Murmur agent orchestrator scaffold.",
+  "name": "agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Scaffolded Murmur agent orchestrator workspace with shared personality config and runtime environment validation.",
+  "engines": {
+    "node": ">=24.0.0 <26"
+  },
+  "scripts": {
+    "build": "pnpm --filter @murmur/shared build && tsc -p tsconfig.json",
+    "typecheck": "pnpm --filter @murmur/shared build && tsc --noEmit -p tsconfig.json",
+    "test": "pnpm --filter @murmur/shared build && vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@langchain/core": "^0.3.72",
+    "@langchain/langgraph": "^0.4.9",
+    "@livekit/agents": "^1.0.2",
+    "@murmur/shared": "workspace:*",
+    "@sentry/node": "^10.10.0",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.36.4",
+    "ioredis": "^5.4.1",
+    "openai": "^5.12.2",
+    "pg": "^8.13.1",
+    "pino": "^9.5.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
