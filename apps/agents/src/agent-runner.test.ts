@@ -314,6 +314,26 @@ afterEach(() => {
 
 describe("AgentRunner", () => {
   /**
+   * The LiveKit Agents SDK keeps its logger in process-global state and throws
+   * during AgentSession construction when callers forget to initialize it.
+   */
+  it("initializes the LiveKit logger before runner startup constructs session runtime objects", async () => {
+    vi.doMock("./livekit/logger.js", () => ({
+      ensureLiveKitLoggerInitialized: vi.fn(),
+    }));
+
+    const module = await importAgentRunnerModule();
+    const livekitLoggerModule = await import("./livekit/logger.js");
+    const fixture = createRunnerFixture(module);
+
+    await fixture.runner.start();
+
+    expect(livekitLoggerModule.ensureLiveKitLoggerInitialized).toHaveBeenCalledTimes(1);
+
+    await fixture.runner.stop();
+  });
+
+  /**
    * Startup should wire the token, room, session, and audio output exactly once.
    */
   it("starts the room connection and LiveKit session with the canonical runner wiring", async () => {

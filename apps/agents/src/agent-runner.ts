@@ -41,6 +41,7 @@ import { createAgentToken } from "./services/livekit.service.js";
 import type { TranscriptRepository } from "./services/transcript-repository.js";
 import { createTTSProvider, type TTSProvider } from "./tts/provider.js";
 import { convertPcmAudioToFrames } from "./graph/livekit-session-bridge.js";
+import { ensureLiveKitLoggerInitialized } from "./livekit/logger.js";
 import {
   AUDIO_OUTPUT_EVENT_PLAYBACK_STARTED,
   AUDIO_OUTPUT_EVENT_PLAYBACK_FINISHED,
@@ -606,6 +607,8 @@ export class AgentRunner extends EventEmitter {
     }
 
     try {
+      ensureLiveKitLoggerInitialized();
+
       const tokenFactory = this.dependencies.createAgentToken ?? createAgentToken;
       const roomFactory = this.dependencies.createRoom ?? (() => new Room());
       const sessionFactory = this.dependencies.createSession ?? (() => new voice.AgentSession({
