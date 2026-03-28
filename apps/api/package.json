@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "pnpm --filter @murmur/shared build && tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "build": "pnpm --filter @murmur/shared build && tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
     "seed": "tsx src/db/seed.ts",

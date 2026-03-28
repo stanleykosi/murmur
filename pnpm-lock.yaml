@@ -26,6 +26,9 @@ importers:
       '@livekit/agents':
         specifier: ^1.0.2
         version: 1.2.1(@livekit/rtc-node@0.13.24)(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76)
+      '@livekit/rtc-node':
+        specifier: ^0.13.24
+        version: 0.13.24
       '@murmur/shared':
         specifier: workspace:*
         version: link:../../packages/shared
