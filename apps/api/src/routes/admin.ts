@@ -6,6 +6,12 @@
  * Redis cleanup, LiveKit teardown, and Centrifugo notification.
  */
 
+import {
+  getAgentLastSpokeKey,
+  getFloorStateKey,
+  getMutedAgentsKey,
+  getRoomSilenceKey,
+} from "@murmur/shared";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 
@@ -32,47 +38,6 @@ const roomAgentParamsSchema = z
     roomId: z.string().uuid("Room id must be a valid UUID."),
   })
   .strict();
-
-/**
- * Builds the Redis muted-agent set key for a room.
- *
- * @param roomId - Room UUID used to namespace the muted set.
- * @returns The canonical muted-agent Redis key.
- */
-function buildMutedAgentsKey(roomId: string): string {
-  return `room:${roomId}:muted`;
-}
-
-/**
- * Builds the Redis floor-state key for a room.
- *
- * @param roomId - Room UUID used to namespace floor state.
- * @returns The canonical floor-state Redis key.
- */
-function buildFloorStateKey(roomId: string): string {
-  return `floor:${roomId}`;
-}
-
-/**
- * Builds the Redis silence-timer key for a room.
- *
- * @param roomId - Room UUID used to namespace silence state.
- * @returns The canonical silence-timer Redis key.
- */
-function buildSilenceTimerKey(roomId: string): string {
-  return `room:${roomId}:silence`;
-}
-
-/**
- * Builds the Redis last-spoke timestamp key for an agent in a room.
- *
- * @param roomId - Room UUID used to namespace the room.
- * @param agentId - Agent UUID used to namespace the participant.
- * @returns The canonical last-spoke Redis key.
- */
-function buildAgentLastSpokeKey(roomId: string, agentId: string): string {
-  return `room:${roomId}:agent:${agentId}:lastSpoke`;
-}
 
 type RoomEndCleanupStep = "listener_notification" | "livekit_teardown";
 
@@ -150,10 +115,10 @@ async function clearRoomRuntimeKeys(
 ): Promise<void> {
   const keysToDelete = [
     `room:${roomId}:listeners`,
-    buildMutedAgentsKey(roomId),
-    buildFloorStateKey(roomId),
-    buildSilenceTimerKey(roomId),
-    ...agentIds.map((agentId) => buildAgentLastSpokeKey(roomId, agentId)),
+    getMutedAgentsKey(roomId),
+    getFloorStateKey(roomId),
+    getRoomSilenceKey(roomId),
+    ...agentIds.map((agentId) => getAgentLastSpokeKey(roomId, agentId)),
   ];
 
   await redis.del(...keysToDelete);
@@ -221,7 +186,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       await assertLiveRoomHasAssignedAgent(params.roomId, params.agentId);
 
       const changed = await redis.sadd(
-        buildMutedAgentsKey(params.roomId),
+        getMutedAgentsKey(params.roomId),
         params.agentId,
       );
 
@@ -249,7 +214,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       await assertLiveRoomHasAssignedAgent(params.roomId, params.agentId);
 
       const changed = await redis.srem(
-        buildMutedAgentsKey(params.roomId),
+        getMutedAgentsKey(params.roomId),
         params.agentId,
       );
 

@@ -17,6 +17,7 @@ import type {
   RoomFormat,
   RoomStatus,
 } from "@murmur/shared";
+import { getMutedAgentsKey } from "@murmur/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../db/client.js";
@@ -376,7 +377,7 @@ async function getMutedAgentIdsByRoomId(
   const pipeline = redis.pipeline();
 
   for (const roomId of roomIds) {
-    pipeline.smembers(`room:${roomId}:muted`);
+    pipeline.smembers(getMutedAgentsKey(roomId));
   }
 
   const results = await pipeline.exec();
