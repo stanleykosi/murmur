@@ -9,6 +9,7 @@
 import {
   getFloorStateKey,
   getMutedAgentsKey,
+  getRoomSilenceKey,
 } from "@murmur/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -118,6 +119,17 @@ function createRedisFixture() {
 
   const getMock = vi.fn(async (key: string) => strings.get(key) ?? null);
   const hgetallMock = vi.fn(async (key: string) => ({ ...(hashes.get(key) ?? {}) }));
+  const delMock = vi.fn(async (...keys: string[]) => {
+    let deletedCount = 0;
+
+    for (const key of keys) {
+      if (strings.delete(key)) {
+        deletedCount += 1;
+      }
+    }
+
+    return deletedCount;
+  });
   const setMock = vi.fn(async (key: string, value: string) => {
     strings.set(key, value);
     return "OK";
@@ -126,6 +138,7 @@ function createRedisFixture() {
     async (key: string, member: string) => (sets.get(key)?.has(member) ?? false ? 1 : 0),
   );
   const client: FloorRedisClient = {
+    del: delMock,
     eval: evalMock,
     get: getMock,
     hgetall: hgetallMock,
@@ -135,10 +148,17 @@ function createRedisFixture() {
 
   return {
     client,
+    delMock,
     evalMock,
+    getString(key: string) {
+      return strings.get(key) ?? null;
+    },
     sismemberMock,
     seedFloorHash(key: string, hash: Record<string, string>) {
       hashes.set(key, { ...hash });
+    },
+    seedString(key: string, value: string) {
+      strings.set(key, value);
     },
     seedMutedAgent(key: string, agentId: string) {
       const members = sets.get(key) ?? new Set<string>();
@@ -198,6 +218,82 @@ describe("FloorController", () => {
 
     await expect(controller.claimFloor(agentId)).rejects.toThrow(
       INCONSISTENT_FLOOR_STATE_ERROR,
+    );
+  });
+
+  it("returns the persisted silence timestamp in the public floor state", async () => {
+    const roomId = "room-1";
+    const logger = createLogger();
+    const redis = createRedisFixture();
+    const floorStateKey = getFloorStateKey(roomId);
+    const roomSilenceKey = getRoomSilenceKey(roomId);
+
+    redis.seedFloorHash(floorStateKey, {
+      claimedAt: "111",
+      holder: "agent-host",
+    });
+    redis.seedString(roomSilenceKey, "222");
+
+    const controller = new FloorController(redis.client, roomId, {
+      logger,
+      now: () => 456,
+    });
+
+    await expect(controller.getFloorState()).resolves.toEqual({
+      roomId,
+      currentHolder: "agent-host",
+      claimedAt: 111,
+      lastSilenceStart: 222,
+    });
+  });
+
+  it("persists the room silence timestamp via the canonical Redis key", async () => {
+    const roomId = "room-1";
+    const logger = createLogger();
+    const redis = createRedisFixture();
+    const roomSilenceKey = getRoomSilenceKey(roomId);
+    const controller = new FloorController(redis.client, roomId, {
+      logger,
+      now: () => 456,
+    });
+
+    await controller.setSilenceStart(789);
+
+    expect(redis.getString(roomSilenceKey)).toBe("789");
+  });
+
+  it("clears the room silence timestamp via Redis delete", async () => {
+    const roomId = "room-1";
+    const logger = createLogger();
+    const redis = createRedisFixture();
+    const roomSilenceKey = getRoomSilenceKey(roomId);
+    redis.seedString(roomSilenceKey, "789");
+    const controller = new FloorController(redis.client, roomId, {
+      logger,
+      now: () => 456,
+    });
+
+    await controller.clearSilenceStart();
+
+    expect(redis.delMock).toHaveBeenCalledWith(roomSilenceKey);
+    expect(redis.getString(roomSilenceKey)).toBeNull();
+  });
+
+  it("fails fast when the persisted silence timestamp is malformed", async () => {
+    const roomId = "room-1";
+    const logger = createLogger();
+    const redis = createRedisFixture();
+    const roomSilenceKey = getRoomSilenceKey(roomId);
+
+    redis.seedString(roomSilenceKey, "not-a-timestamp");
+
+    const controller = new FloorController(redis.client, roomId, {
+      logger,
+      now: () => 456,
+    });
+
+    await expect(controller.getFloorState()).rejects.toThrow(
+      `room silence timestamp for room "${roomId}" must be stored as a non-negative integer string.`,
     );
   });
 });

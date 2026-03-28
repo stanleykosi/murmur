@@ -11,6 +11,7 @@ import {
   getAgentLastSpokeKey,
   getFloorStateKey,
   getMutedAgentsKey,
+  getRoomSilenceKey,
   type FloorState,
 } from "@murmur/shared";
 import pino from "pino";
@@ -29,6 +30,7 @@ export interface FloorControllerLogger {
  * Minimal Redis client surface required by the floor controller.
  */
 export interface FloorRedisClient {
+  del(...keys: string[]): Promise<unknown>;
   eval(
     script: string,
     numKeys: number,
@@ -239,6 +241,8 @@ export class FloorController {
 
   private readonly roomId: string;
 
+  private readonly roomSilenceKey: string;
+
   /**
    * Creates a floor controller scoped to one Murmur room.
    *
@@ -258,6 +262,7 @@ export class FloorController {
     this.roomId = normalizeRequiredText(roomId, "roomId");
     this.floorStateKey = getFloorStateKey(this.roomId);
     this.mutedAgentsKey = getMutedAgentsKey(this.roomId);
+    this.roomSilenceKey = getRoomSilenceKey(this.roomId);
     this.logger = options.logger ?? defaultFloorControllerLogger;
     this.now = options.now ?? Date.now;
   }
@@ -348,9 +353,19 @@ export class FloorController {
    * @returns The current holder's agent ID, or `null` when the floor is empty.
    */
   public async getCurrentHolder(): Promise<string | null> {
-    const floorState = await this.readFloorState();
+    const floorState = await this.getFloorState();
 
     return floorState.currentHolder;
+  }
+
+  /**
+   * Reads the canonical floor state for the room, including active silence
+   * tracking derived from Redis.
+   *
+   * @returns The validated floor state for the room.
+   */
+  public async getFloorState(): Promise<FloorState> {
+    return await this.readFloorState();
   }
 
   /**
@@ -419,6 +434,39 @@ export class FloorController {
   }
 
   /**
+   * Persists the start of an empty-floor silence window for the room.
+   *
+   * @param timestamp - Epoch-millisecond timestamp marking when silence began.
+   */
+  public async setSilenceStart(timestamp: number): Promise<void> {
+    const normalizedTimestamp = normalizeTimestamp(timestamp, "timestamp");
+
+    await this.redis.set(this.roomSilenceKey, String(normalizedTimestamp));
+
+    this.logger.debug(
+      {
+        roomId: this.roomId,
+        timestamp: normalizedTimestamp,
+      },
+      "Persisted room silence-start timestamp.",
+    );
+  }
+
+  /**
+   * Clears any persisted empty-floor silence window for the room.
+   */
+  public async clearSilenceStart(): Promise<void> {
+    await this.redis.del(this.roomSilenceKey);
+
+    this.logger.debug(
+      {
+        roomId: this.roomId,
+      },
+      "Cleared room silence-start timestamp.",
+    );
+  }
+
+  /**
    * Reads and validates the room's floor hash from Redis.
    *
    * Both `holder` and `claimedAt` must either exist together or be absent
@@ -428,7 +476,10 @@ export class FloorController {
    * @returns The canonical floor state for the room.
    */
   private async readFloorState(): Promise<FloorState> {
-    const floorHash = await this.redis.hgetall(this.floorStateKey);
+    const [floorHash, persistedSilenceStart] = await Promise.all([
+      this.redis.hgetall(this.floorStateKey),
+      this.redis.get(this.roomSilenceKey),
+    ]);
 
     if (!floorHash || typeof floorHash !== "object") {
       throw new Error("Redis floor state must resolve to an object.");
@@ -442,7 +493,13 @@ export class FloorController {
         roomId: this.roomId,
         currentHolder: null,
         claimedAt: null,
-        lastSilenceStart: null,
+        lastSilenceStart:
+          persistedSilenceStart === null
+            ? null
+            : parseStoredTimestamp(
+              persistedSilenceStart,
+              `room silence timestamp for room "${this.roomId}"`,
+            ),
       };
     }
 
@@ -459,7 +516,13 @@ export class FloorController {
         claimedAt,
         `floor claimedAt for room "${this.roomId}"`,
       ),
-      lastSilenceStart: null,
+      lastSilenceStart:
+        persistedSilenceStart === null
+          ? null
+          : parseStoredTimestamp(
+            persistedSilenceStart,
+            `room silence timestamp for room "${this.roomId}"`,
+          ),
     };
   }
 }
