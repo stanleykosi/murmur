@@ -132,7 +132,7 @@ describe("buildOpenRouterRequest", () => {
         {
           role: "user",
           content:
-            "Current conversation:\n[Rex]: Five years feels optimistic.\n\nIt's your turn to speak. Respond naturally in 1-3 sentences.",
+            "Recent transcript context:\n[Rex]: Five years feels optimistic.\n\nYou are producing the next live spoken turn for this room. Use the recent transcript as context and respond with exactly one concise, natural, additive turn in 1-3 sentences. Do not use markdown, bullet points, numbered lists, emojis, speaker labels, quoted script formatting, parenthetical stage directions, or meta commentary.",
         },
       ],
       max_tokens: 420,
@@ -155,7 +155,7 @@ describe("buildOpenRouterRequest", () => {
     expect(request.messages[1]).toEqual({
       role: "user",
       content:
-        "Current conversation:\nNo recent conversation context is available yet.\n\nIt's your turn to speak. Respond naturally in 1-3 sentences.",
+        "Recent transcript context:\nNo recent conversation context is available yet.\n\nYou are producing the next live spoken turn for this room. Use the recent transcript as context and respond with exactly one concise, natural, additive turn in 1-3 sentences. Do not use markdown, bullet points, numbered lists, emojis, speaker labels, quoted script formatting, parenthetical stage directions, or meta commentary.",
     });
   });
 

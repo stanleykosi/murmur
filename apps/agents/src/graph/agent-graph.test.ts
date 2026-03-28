@@ -6,11 +6,11 @@
  */
 
 import type { TranscriptEntry, TranscriptEvent } from "@murmur/shared";
-import { HOUSE_AGENTS } from "@murmur/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ContextManager } from "../context/manager.js";
 import type { LLMProvider } from "../llm/provider.js";
+import type { AgentRuntimeProfile } from "../runtime/agent-profile.js";
 import type { TTSProvider } from "../tts/provider.js";
 import { createAgentGraph } from "./agent-graph.js";
 import {
@@ -33,6 +33,20 @@ function createLogger(): AgentGraphLogger {
     error: vi.fn(),
   };
 }
+
+/**
+ * Canonical runtime-facing agent fixture for graph tests.
+ */
+const TEST_AGENT: AgentRuntimeProfile = {
+  id: "agent-nova",
+  name: "Nova",
+  personality: "Curious, incisive, and energetic.",
+  voiceId: "voice-nova",
+  ttsProvider: "cartesia",
+  accentColor: "#00D4FF",
+  avatarUrl: "/agents/nova.png",
+  role: "host",
+};
 
 /**
  * Creates a transcript entry fixture with Murmur's shared field contract.
@@ -125,7 +139,7 @@ function createBindings(
   }));
   const getTranscriptSnapshot = vi.fn(async () => [...transcriptSnapshot]);
   const bindings: AgentGraphBindings = {
-    agent: HOUSE_AGENTS[0],
+    agent: TEST_AGENT,
     roomId: "room-1",
     llmProvider,
     ttsProvider,

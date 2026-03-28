@@ -10,6 +10,8 @@
   },
   "scripts": {
     "build": "pnpm --filter @murmur/shared build && tsc -p tsconfig.json",
+    "dev": "tsx watch src/orchestrator.ts",
+    "start": "node dist/orchestrator.js",
     "typecheck": "pnpm --filter @murmur/shared build && tsc --noEmit -p tsconfig.json",
     "test": "pnpm --filter @murmur/shared build && vitest run --passWithNoTests"
   },
@@ -24,6 +26,7 @@
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.36.4",
     "ioredis": "^5.4.1",
+    "livekit-server-sdk": "^2.14.1",
     "openai": "^5.12.2",
     "pg": "^8.13.1",
     "pino": "^9.5.0",
@@ -31,6 +34,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.6",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"

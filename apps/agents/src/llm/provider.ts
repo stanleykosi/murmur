@@ -17,7 +17,7 @@ export const EMPTY_TRANSCRIPT_CONTEXT =
  * Canonical turn-taking instruction appended to every model invocation.
  */
 export const TURN_PROMPT_INSTRUCTION =
-  "It's your turn to speak. Respond naturally in 1-3 sentences.";
+  "You are producing the next live spoken turn for this room. Use the recent transcript as context and respond with exactly one concise, natural, additive turn in 1-3 sentences. Do not use markdown, bullet points, numbered lists, emojis, speaker labels, quoted script formatting, parenthetical stage directions, or meta commentary.";
 
 /**
  * Tunable parameters supported by Murmur's LLM generation pipeline.
@@ -112,5 +112,5 @@ export function normalizeTranscriptContext(transcript: string): string {
 export function buildTurnPrompt(transcript: string): string {
   const normalizedTranscript = normalizeTranscriptContext(transcript);
 
-  return `Current conversation:\n${normalizedTranscript}\n\n${TURN_PROMPT_INSTRUCTION}`;
+  return `Recent transcript context:\n${normalizedTranscript}\n\n${TURN_PROMPT_INSTRUCTION}`;
 }

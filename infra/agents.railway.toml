@@ -1,0 +1,33 @@
+# Railway config-as-code for the Murmur agents orchestrator service.
+# Keep the service root at the repository root so pnpm workspace dependencies
+# remain available to the Railpack build.
+
+"$schema" = "https://railway.com/railway.schema.json"
+
+[build]
+builder = "RAILPACK"
+buildCommand = "pnpm --filter agents build"
+watchPatterns = [
+  "apps/agents/**",
+  "packages/shared/**",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "tsconfig.base.json",
+  "turbo.json",
+  "infra/agents.railway.toml"
+]
+
+[deploy]
+# Railway injects PORT dynamically; the agents orchestrator now binds to that
+# value automatically and falls back to 3001 only outside Railway.
+startCommand = "node apps/agents/dist/orchestrator.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+overlapSeconds = 10
+drainingSeconds = 30
+
+[environments.pr.deploy]
+restartPolicyType = "NEVER"

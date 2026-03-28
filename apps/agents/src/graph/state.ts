@@ -9,13 +9,13 @@
 
 import { Annotation } from "@langchain/langgraph";
 import type {
-  HouseAgentDefinition,
   TranscriptEntry,
   TranscriptEvent,
 } from "@murmur/shared";
 
 import type { ContextManager } from "../context/manager.js";
 import type { LLMProvider } from "../llm/provider.js";
+import type { AgentRuntimeProfile } from "../runtime/agent-profile.js";
 import type { TTSProvider } from "../tts/provider.js";
 
 /**
@@ -82,7 +82,7 @@ export interface AgentSessionBridge {
  * Side-effect bindings required by the Murmur graph nodes.
  */
 export interface AgentGraphBindings {
-  agent: HouseAgentDefinition;
+  agent: AgentRuntimeProfile;
   roomId: string;
   llmProvider: LLMProvider;
   ttsProvider: TTSProvider;
