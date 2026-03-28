@@ -76,6 +76,7 @@ describe("agent env", () => {
       DATABASE_URL: "  postgresql://postgres:secret@example.com:5432/postgres  ",
       OPENROUTER_DEFAULT_MODEL: undefined,
       OPENROUTER_DEFAULT_MAX_TOKENS: undefined,
+      SENTRY_DSN: "   ",
     });
     const module = await importEnvModule(environment);
 
@@ -83,6 +84,7 @@ describe("agent env", () => {
       DATABASE_URL: "postgresql://postgres:secret@example.com:5432/postgres",
       OPENROUTER_DEFAULT_MODEL: module.DEFAULT_OPENROUTER_MODEL,
       OPENROUTER_DEFAULT_MAX_TOKENS: module.DEFAULT_OPENROUTER_MAX_TOKENS,
+      SENTRY_DSN: undefined,
     });
   });
 
@@ -106,5 +108,19 @@ describe("agent env", () => {
     ).toThrowError(
       /DATABASE_URL|REDIS_URL|OPENROUTER_API_KEY|OPENROUTER_DEFAULT_MAX_TOKENS|SENTRY_DSN/,
     );
+  });
+
+  /**
+   * Confirms operators can omit Sentry entirely without blocking service boot.
+   */
+  it("allows SENTRY_DSN to be omitted entirely", async () => {
+    const module = await importEnvModule();
+    const parsedEnvironment = module.parseAgentEnvironment(
+      createValidEnvironment({
+        SENTRY_DSN: undefined,
+      }),
+    );
+
+    expect(parsedEnvironment).not.toHaveProperty("SENTRY_DSN");
   });
 });

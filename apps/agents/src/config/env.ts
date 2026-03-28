@@ -55,6 +55,41 @@ export function requiredUrl(label: string): z.ZodType<string> {
 }
 
 /**
+ * Builds an optional URL validator that treats missing or blank values as
+ * intentionally disabled configuration.
+ *
+ * @param label - Human-readable variable name used in validation messages.
+ * @returns A Zod schema that yields `undefined` when omitted or blank.
+ */
+export function optionalUrl(
+  label: string,
+): z.ZodType<string | undefined, z.ZodTypeDef, unknown> {
+  return z.preprocess((value) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmedValue = value.trim();
+
+    return trimmedValue.length > 0 ? trimmedValue : undefined;
+  }, z.union([
+    z.undefined(),
+    z.string().refine((value) => {
+      try {
+        new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, `${label} must be a valid URL.`),
+  ]));
+}
+
+/**
  * Builds an optional positive-integer validator with a numeric default.
  *
  * Environment variables arrive as strings, so this helper trims, parses, and
@@ -111,7 +146,7 @@ const AgentEnvSchema = z.object({
   ),
   CARTESIA_API_KEY: requiredString("CARTESIA_API_KEY"),
   ELEVENLABS_API_KEY: requiredString("ELEVENLABS_API_KEY"),
-  SENTRY_DSN: requiredUrl("SENTRY_DSN"),
+  SENTRY_DSN: optionalUrl("SENTRY_DSN"),
 });
 
 /**
