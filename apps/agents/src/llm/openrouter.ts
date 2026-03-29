@@ -94,7 +94,8 @@ export const OPENROUTER_DEFAULT_TEMPERATURE = 0.8;
  * Fail-fast timeout for OpenRouter requests so a stalled upstream call does not
  * block the room floor indefinitely.
  */
-export const OPENROUTER_REQUEST_TIMEOUT_MS = 20_000;
+export const OPENROUTER_REQUEST_TIMEOUT_MS = 35_000;
+const OPENROUTER_EMPTY_RESPONSE_RETRY_COUNT = 1;
 
 const openRouterLogger = pino({
   level: process.env.LOG_LEVEL?.trim() || "info",
@@ -235,6 +236,18 @@ export function extractResponseText(completion: ChatCompletion): string {
 }
 
 /**
+ * Indicates whether an upstream completion failed specifically because the
+ * provider returned no usable assistant text.
+ *
+ * @param error - Candidate error thrown during response extraction.
+ * @returns `true` when the error represents an empty completion.
+ */
+function isEmptyAssistantResponseError(error: unknown): boolean {
+  return error instanceof Error
+    && error.message === "OpenRouter returned no assistant message content.";
+}
+
+/**
  * Canonical Murmur LLM provider implementation that routes through OpenRouter.
  */
 export class OpenRouterLLMProvider implements LLMProvider {
@@ -268,10 +281,42 @@ export class OpenRouterLLMProvider implements LLMProvider {
     const requestStartedAt = Date.now();
 
     try {
-      const completion = await this.client.chat.completions.create(request, {
-        signal: AbortSignal.timeout(OPENROUTER_REQUEST_TIMEOUT_MS),
-      });
-      const responseText = extractResponseText(completion);
+      let responseText: string | null = null;
+
+      for (
+        let attempt = 0;
+        attempt <= OPENROUTER_EMPTY_RESPONSE_RETRY_COUNT;
+        attempt += 1
+      ) {
+        const completion = await this.client.chat.completions.create(request, {
+          signal: AbortSignal.timeout(OPENROUTER_REQUEST_TIMEOUT_MS),
+        });
+
+        try {
+          responseText = extractResponseText(completion);
+          break;
+        } catch (error) {
+          if (
+            attempt === OPENROUTER_EMPTY_RESPONSE_RETRY_COUNT
+            || !isEmptyAssistantResponseError(error)
+          ) {
+            throw error;
+          }
+
+          this.logger.warn(
+            {
+              attempt: attempt + 1,
+              maxTokens: request.max_tokens,
+              model: request.model,
+            },
+            "OpenRouter returned an empty assistant message; retrying once.",
+          );
+        }
+      }
+
+      if (responseText === null) {
+        throw new Error("OpenRouter returned no assistant message content.");
+      }
 
       this.logger.info(
         {

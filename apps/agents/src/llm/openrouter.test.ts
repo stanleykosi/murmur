@@ -263,6 +263,36 @@ describe("OpenRouterLLMProvider", () => {
   });
 
   /**
+   * Free-tier upstream models occasionally return an empty assistant payload on
+   * the first attempt even though a retry yields usable content. The provider
+   * should retry that specific failure once instead of failing the whole turn.
+   */
+  it("retries once when OpenRouter returns an empty assistant message", async () => {
+    const module = await importOpenRouterModule();
+    const createCompletion = vi
+      .fn<OpenRouterClient["chat"]["completions"]["create"]>()
+      .mockResolvedValueOnce(createChatCompletionFixture(null, null))
+      .mockResolvedValueOnce(
+        createChatCompletionFixture(
+          "  Here's the sharper version of the disagreement.  ",
+        ),
+      );
+    const client: OpenRouterClient = {
+      chat: {
+        completions: {
+          create: createCompletion,
+        },
+      },
+    };
+    const provider = new module.OpenRouterLLMProvider(client);
+
+    await expect(
+      provider.generateResponse("You are Nova.", "[Rex]: That's still too fast."),
+    ).resolves.toBe("Here's the sharper version of the disagreement.");
+    expect(createCompletion).toHaveBeenCalledTimes(2);
+  });
+
+  /**
    * Ensures callers receive a clear failure when OpenRouter responds without
    * any usable assistant content.
    */

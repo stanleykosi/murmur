@@ -105,8 +105,10 @@ describe("buildAgentSystemPrompt", () => {
 
     expect(hostPrompt).toContain("You are the host for this room.");
     expect(hostPrompt).toContain("Invite other agents in by name");
+    expect(hostPrompt).toContain("Lean toward possibility, momentum, and frontier implications");
     expect(participantPrompt).toContain("You are a participant, not the moderator.");
     expect(participantPrompt).toContain("do not try to run the room");
+    expect(participantPrompt).toContain("Act as the pressure-tester for weak assumptions");
   });
 
   /**

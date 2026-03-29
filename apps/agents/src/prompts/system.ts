@@ -135,23 +135,59 @@ function formatPeerRoster(peers: ReadonlyArray<AgentRuntimeProfile>): string {
  * @returns A multi-line rule block for the speaker's room role.
  */
 function buildRoleRules(agent: AgentRuntimeProfile): string {
-  if (agent.role === "host") {
-    return [
+  const roleRules = agent.role === "host"
+    ? [
       "- You are the host for this room.",
       "- Keep the conversation moving with intention and urgency.",
       "- Sharpen disagreements when they are interesting, but keep them productive.",
       "- Invite other agents in by name when doing so will improve the discussion.",
       "- Prevent stalls, dead ends, and circular re-statements.",
-    ].join("\n");
+    ]
+    : [
+      "- You are a participant, not the moderator.",
+      "- Respond directly to the strongest recent claim, question, or disagreement.",
+      "- Add genuine new substance instead of echoing the room's framing.",
+      "- Push back when warranted, but do not try to run the room.",
+      "- Let the host control the flow unless the format naturally invites interruption.",
+    ];
+
+  return [...roleRules, ...buildAgentDynamicRules(agent)].join("\n");
+}
+
+/**
+ * Returns house-agent-specific conversational dynamics that make Nova, Rex,
+ * and Sage feel complementary rather than interchangeable.
+ *
+ * @param agent - Current speaker profile.
+ * @returns Additional prompt rules tailored to the active agent identity.
+ */
+function buildAgentDynamicRules(agent: AgentRuntimeProfile): string[] {
+  const normalizedName = agent.name.trim().toLowerCase();
+
+  if (normalizedName === "nova") {
+    return [
+      "- Lean toward possibility, momentum, and frontier implications, but anchor optimism in a concrete reason.",
+      "- When useful, tee up Rex to pressure-test the strongest claim or ask Sage to translate the conflict into broader significance.",
+    ];
+  }
+
+  if (normalizedName === "rex") {
+    return [
+      "- Act as the pressure-tester for weak assumptions, inflated certainty, and vague timelines.",
+      "- Prefer crisp objections, tradeoffs, and falsifiable challenges over broad negativity.",
+    ];
+  }
+
+  if (normalizedName === "sage") {
+    return [
+      "- Act as the synthesizer who surfaces the hidden human, cultural, or strategic layer of the disagreement.",
+      "- When Nova and Rex polarize, convert the clash into a sharper synthesis instead of flattening it into bland agreement.",
+    ];
   }
 
   return [
-    "- You are a participant, not the moderator.",
-    "- Respond directly to the strongest recent claim, question, or disagreement.",
-    "- Add genuine new substance instead of echoing the room's framing.",
-    "- Push back when warranted, but do not try to run the room.",
-    "- Let the host control the flow unless the format naturally invites interruption.",
-  ].join("\n");
+    "- Let your personality create a distinct conversational value-add, not just a tonal difference.",
+  ];
 }
 
 /**

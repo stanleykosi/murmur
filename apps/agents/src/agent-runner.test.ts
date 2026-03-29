@@ -146,9 +146,20 @@ function createTranscriptEntry(roomId: string): TranscriptEntry {
 class FakeAudioOutput extends EventEmitter {
   public readonly sampleRate = 24_000;
 
+  public readonly captureFrame = vi.fn(async () => undefined);
+
   public readonly close = vi.fn(async () => undefined);
 
+  public readonly clearBuffer = vi.fn(() => undefined);
+
+  public readonly flush = vi.fn(() => undefined);
+
   public readonly start = vi.fn(async () => undefined);
+
+  public readonly waitForPlayout = vi.fn(async () => ({
+    playbackPosition: 0,
+    interrupted: false,
+  }));
 }
 
 /**
@@ -499,14 +510,36 @@ describe("AgentRunner", () => {
     const playoutPromise = new Promise<void>((resolve) => {
       resolvePlayout = resolve;
     });
-    const session = {
-      say: vi.fn(() => ({
-        waitForPlayout: () => playoutPromise,
-      })),
-    };
+    const playbackStartedListeners = new Set<() => void>();
+    const audioOutput = {
+      sampleRate: 24_000,
+      start: vi.fn(async () => undefined),
+      close: vi.fn(async () => undefined),
+      captureFrame: vi.fn(async () => undefined),
+      clearBuffer: vi.fn(() => undefined),
+      flush: vi.fn(() => undefined),
+      waitForPlayout: vi.fn(() => playoutPromise.then(() => ({
+        playbackPosition: 1,
+        interrupted: false,
+      }))),
+      on: vi.fn((eventName: string, listener: () => void) => {
+        if (eventName === "playbackStarted") {
+          playbackStartedListeners.add(listener);
+        }
+
+        return audioOutput;
+      }),
+      off: vi.fn((eventName: string, listener: () => void) => {
+        if (eventName === "playbackStarted") {
+          playbackStartedListeners.delete(listener);
+        }
+
+        return audioOutput;
+      }),
+    } as unknown as FakeAudioOutput;
     const bridge = module.createRunnerSessionBridge({
-      session: session as never,
       vad: vadDetector,
+      audioOutput: audioOutput as never,
       timeoutMs: 500,
     });
     let settled = false;
@@ -516,6 +549,9 @@ describe("AgentRunner", () => {
       });
 
     await flushMicrotasks();
+    for (const listener of playbackStartedListeners) {
+      listener();
+    }
     resolvePlayout();
     await flushMicrotasks();
 
@@ -523,6 +559,8 @@ describe("AgentRunner", () => {
     expect(vadDetector.beginSyntheticUtterance).toHaveBeenCalledTimes(1);
     expect(vadDetector.pushFrame).toHaveBeenCalled();
     expect(vadDetector.flush).toHaveBeenCalledTimes(1);
+    expect(audioOutput.captureFrame).toHaveBeenCalled();
+    expect(audioOutput.flush).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(1_499);
     await flushMicrotasks();
@@ -532,6 +570,7 @@ describe("AgentRunner", () => {
     await speakPromise;
 
     expect(settled).toBe(true);
+    expect(audioOutput.waitForPlayout).toHaveBeenCalledTimes(1);
   });
 
   /**
@@ -544,14 +583,36 @@ describe("AgentRunner", () => {
 
     const module = await importAgentRunnerModule();
     const vadDetector = new FakeVADDetector();
-    const session = {
-      say: vi.fn(() => ({
-        waitForPlayout: async () => undefined,
+    const playbackStartedListeners = new Set<() => void>();
+    const audioOutput = {
+      sampleRate: 24_000,
+      start: vi.fn(async () => undefined),
+      close: vi.fn(async () => undefined),
+      captureFrame: vi.fn(async () => undefined),
+      clearBuffer: vi.fn(() => undefined),
+      flush: vi.fn(() => undefined),
+      waitForPlayout: vi.fn(async () => ({
+        playbackPosition: 2,
+        interrupted: false,
       })),
-    };
+      on: vi.fn((eventName: string, listener: () => void) => {
+        if (eventName === "playbackStarted") {
+          playbackStartedListeners.add(listener);
+        }
+
+        return audioOutput;
+      }),
+      off: vi.fn((eventName: string, listener: () => void) => {
+        if (eventName === "playbackStarted") {
+          playbackStartedListeners.delete(listener);
+        }
+
+        return audioOutput;
+      }),
+    } as unknown as FakeAudioOutput;
     const bridge = module.createRunnerSessionBridge({
-      session: session as never,
       vad: vadDetector,
+      audioOutput: audioOutput as never,
       timeoutMs: 500,
     });
     const longPcmAudio = Buffer.alloc(96_000, 0);
@@ -565,6 +626,9 @@ describe("AgentRunner", () => {
         rejection = error;
       });
 
+    for (const listener of playbackStartedListeners) {
+      listener();
+    }
     await vi.advanceTimersByTimeAsync(600);
     await flushMicrotasks();
 

@@ -156,6 +156,10 @@ export interface SessionAudioOutputLike {
   sampleRate: number;
   start(): Promise<void>;
   close(): Promise<void>;
+  captureFrame(frame: AudioFrame): Promise<void>;
+  flush(): void;
+  clearBuffer(): void;
+  waitForPlayout(): Promise<PlaybackFinishedEvent>;
   on(
     eventName: typeof AUDIO_OUTPUT_EVENT_PLAYBACK_STARTED,
     listener: (payload: PlaybackStartedEvent) => void,
@@ -261,8 +265,8 @@ export type AgentRunnerEventName =
  * Bridge-construction options for the runner's custom session adapter.
  */
 export interface CreateRunnerSessionBridgeOptions {
-  session: AgentSessionLike;
   vad: VADDetectorLike;
+  audioOutput: SessionAudioOutputLike;
   timeoutMs?: number;
 }
 
@@ -406,6 +410,45 @@ function waitForDelay(durationMs: number): Promise<void> {
 }
 
 /**
+ * Waits until the session audio output emits its first playback-started event.
+ *
+ * @param audioOutput - Runner-local LiveKit room audio output.
+ * @param timeoutMs - Maximum time to wait before failing.
+ * @returns A promise that resolves once playback starts.
+ */
+function waitForPlaybackStart(
+  audioOutput: SessionAudioOutputLike,
+  timeoutMs: number,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeoutHandle = setTimeout(() => {
+      cleanup();
+      reject(
+        new Error(`Timed out waiting ${timeoutMs}ms for synthetic playback to start.`),
+      );
+    }, timeoutMs);
+
+    const handlePlaybackStarted = (): void => {
+      cleanup();
+      resolve();
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeoutHandle);
+      audioOutput.off(
+        AUDIO_OUTPUT_EVENT_PLAYBACK_STARTED,
+        handlePlaybackStarted,
+      );
+    };
+
+    audioOutput.on(
+      AUDIO_OUTPUT_EVENT_PLAYBACK_STARTED,
+      handlePlaybackStarted,
+    );
+  });
+}
+
+/**
  * Creates the runner-specific session bridge that couples `session.say(...)`
  * with Murmur's deterministic synthetic speech boundary: audio playout plus
  * the fixed trailing silence threshold used for room turn-taking.
@@ -426,17 +469,24 @@ export function createRunnerSessionBridge(
     throw new Error("timeoutMs must be a positive finite number.");
   }
 
-  if (!options.session || typeof options.session.say !== "function") {
-    throw new Error("session must expose a LiveKit-compatible say() method.");
-  }
-
   if (!options.vad || typeof options.vad.pushFrame !== "function") {
     throw new Error("vad must expose pushFrame().");
   }
 
+  if (
+    !options.audioOutput
+    || typeof options.audioOutput.captureFrame !== "function"
+    || typeof options.audioOutput.flush !== "function"
+    || typeof options.audioOutput.waitForPlayout !== "function"
+  ) {
+    throw new Error(
+      "audioOutput must expose captureFrame(), flush(), and waitForPlayout().",
+    );
+  }
+
   return {
     async speakText(text: string, pcmAudio: Buffer): Promise<void> {
-      const normalizedText = normalizeRequiredText(text, "text");
+      normalizeRequiredText(text, "text");
 
       if (!Buffer.isBuffer(pcmAudio) || pcmAudio.byteLength === 0) {
         throw new Error("pcmAudio must be a non-empty Buffer.");
@@ -462,21 +512,27 @@ export function createRunnerSessionBridge(
         };
         const waitForSyntheticBoundary = async () => {
           try {
-            const speechHandle = options.session.say(normalizedText, {
-              audio: createAudioFrameStream(audioFrames),
-              allowInterruptions: false,
-              addToChatCtx: false,
-            });
+            const playbackStartPromise = waitForPlaybackStart(
+              options.audioOutput,
+              resolvedTimeoutMs,
+            );
 
-            if (!speechHandle || typeof speechHandle.waitForPlayout !== "function") {
-              throw new Error("session.say(...) must return a speech handle with waitForPlayout().");
+            for (const frame of audioFrames) {
+              await options.audioOutput.captureFrame(frame);
             }
 
-            await speechHandle.waitForPlayout();
+            options.audioOutput.flush();
+            await playbackStartPromise;
+            await options.audioOutput.waitForPlayout();
             await waitForDelay(SILENCE_THRESHOLD_MS);
             cleanup();
             resolve();
           } catch (error) {
+            try {
+              options.audioOutput.clearBuffer();
+            } catch {
+              // Best-effort cleanup only.
+            }
             cleanup();
             reject(normalizeError(error));
           }
@@ -539,6 +595,8 @@ export class AgentRunner extends EventEmitter {
   private session: AgentSessionLike | null = null;
 
   private sessionAudioOutput: SessionAudioOutputLike | null = null;
+
+  private turnExecuting = false;
 
   private stopping = false;
 
@@ -653,6 +711,13 @@ export class AgentRunner extends EventEmitter {
   }
 
   /**
+   * Returns whether the runner is currently executing one turn.
+   */
+  public isExecutingTurn(): boolean {
+    return this.turnExecuting && !this.stopping;
+  }
+
+  /**
    * Starts the LiveKit connection, session runtime, and graph bindings.
    */
   public async start(): Promise<void> {
@@ -709,8 +774,8 @@ export class AgentRunner extends EventEmitter {
       const vadDetector = await vadFactory();
       this.vadDetector = vadDetector;
       const sessionBridge = sessionBridgeFactory({
-        session,
         vad: vadDetector,
+        audioOutput: sessionAudioOutput,
       });
       const ttsProvider = ttsProviderFactory(this.agent.ttsProvider);
       this.ttsProvider = ttsProvider;
@@ -786,6 +851,7 @@ export class AgentRunner extends EventEmitter {
         }
 
         this.pendingPromptOverride = promptOverride;
+        this.turnExecuting = true;
 
         try {
           this.graphState = await this.graph!.invoke(this.graphState);
@@ -817,6 +883,7 @@ export class AgentRunner extends EventEmitter {
 
           throw normalizedError;
         } finally {
+          this.turnExecuting = false;
           this.pendingPromptOverride = null;
         }
       });
@@ -854,6 +921,7 @@ export class AgentRunner extends EventEmitter {
     this.sessionAudioOutput = null;
     this.roomConnection = null;
     this.ttsProvider = null;
+    this.turnExecuting = false;
 
     this.emit("stopped", {
       roomId: this.room.roomId,

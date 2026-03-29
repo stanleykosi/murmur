@@ -62,6 +62,7 @@ function resolveDefaultHealthPort(): number {
 export interface AgentRunnerLike {
   getAgentProfile(): AgentRuntimeProfile;
   isReady(): boolean;
+  isExecutingTurn(): boolean;
   start(): Promise<void>;
   stop(): Promise<void>;
   requestTurn(request?: AgentRunnerTurnRequest): Promise<void>;
@@ -767,6 +768,10 @@ export class Orchestrator {
         return;
       }
 
+      if ([...runtime.runners.values()].some((runner) => runner.isExecutingTurn())) {
+        return;
+      }
+
       const currentHolder = await runtime.floorController.getCurrentHolder();
 
       if (currentHolder !== null) {
@@ -989,6 +994,11 @@ export class Orchestrator {
     }
 
     const hostRunner = runtime.runners.get(payload.hostAgentId);
+
+    if ([...runtime.runners.values()].some((runner) => runner.isExecutingTurn())) {
+      await floorController.releaseFloor(payload.hostAgentId).catch(() => undefined);
+      return;
+    }
 
     if (!hostRunner || !hostRunner.isReady()) {
       await floorController.releaseFloor(payload.hostAgentId).catch(() => undefined);

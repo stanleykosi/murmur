@@ -115,6 +115,8 @@ export class RoomAudioOutput extends EventEmitter {
 
   private closed = false;
 
+  private currentPlaybackToken = 0;
+
   private currentSegmentDurationSeconds = 0;
 
   private firstFrameEmitted = false;
@@ -124,17 +126,15 @@ export class RoomAudioOutput extends EventEmitter {
     interrupted: false,
   };
 
-  private playbackFinishedPromise: Promise<PlaybackFinishedEvent> = Promise.resolve(
-    this.lastPlaybackEvent,
-  );
+  private playbackFinishedCount = 0;
 
-  private playbackFinishedResolver:
-    | ((value: PlaybackFinishedEvent) => void)
-    | null = null;
+  private playbackSegmentsCount = 0;
+
+  private playbackSignal = this.createPlaybackSignal();
 
   private playbackStartedAtMs: number | null = null;
 
-  private playbackTimer: NodeJS.Timeout | null = null;
+  private segmentCapturing = false;
 
   private publication: LocalTrackPublication | null = null;
 
@@ -216,6 +216,11 @@ export class RoomAudioOutput extends EventEmitter {
 
     const normalizedFrame = normalizeAudioFrame(frame);
 
+    if (!this.segmentCapturing) {
+      this.segmentCapturing = true;
+      this.playbackSegmentsCount += 1;
+    }
+
     if (!this.firstFrameEmitted) {
       this.firstFrameEmitted = true;
       this.emit(AUDIO_OUTPUT_EVENT_PLAYBACK_STARTED, {
@@ -239,26 +244,22 @@ export class RoomAudioOutput extends EventEmitter {
       return;
     }
 
-    if (this.playbackTimer) {
-      this.clearActivePlaybackTimer();
-    }
-
-    this.playbackFinishedPromise = new Promise<PlaybackFinishedEvent>((resolve) => {
-      this.playbackFinishedResolver = resolve;
-    });
+    const playbackToken = ++this.currentPlaybackToken;
+    const playbackPosition = this.currentSegmentDurationSeconds;
+    this.segmentCapturing = false;
     this.playbackStartedAtMs = Date.now();
+    void this.audioSource.waitForPlayout().then(() => {
+      if (this.closed || playbackToken !== this.currentPlaybackToken) {
+        return;
+      }
 
-    const durationMs = Math.max(
-      Math.ceil(this.currentSegmentDurationSeconds * 1000),
-      1,
-    );
-
-    this.playbackTimer = setTimeout(() => {
       this.finishPlaybackSegment({
-        playbackPosition: this.currentSegmentDurationSeconds,
+        playbackPosition,
         interrupted: false,
       });
-    }, durationMs);
+    }).catch(() => {
+      // Room shutdown or track teardown should not throw from the audio output.
+    });
   }
 
   /**
@@ -278,6 +279,7 @@ export class RoomAudioOutput extends EventEmitter {
         this.currentSegmentDurationSeconds,
       );
 
+    this.currentPlaybackToken += 1;
     this.finishPlaybackSegment({
       playbackPosition,
       interrupted: true,
@@ -290,7 +292,14 @@ export class RoomAudioOutput extends EventEmitter {
    * @returns The last playback-finished payload.
    */
   public async waitForPlayout(): Promise<PlaybackFinishedEvent> {
-    return await this.playbackFinishedPromise;
+    const targetPlaybackCount = this.playbackSegmentsCount;
+
+    while (this.playbackFinishedCount < targetPlaybackCount) {
+      await this.playbackSignal.promise;
+      this.playbackSignal = this.createPlaybackSignal();
+    }
+
+    return this.lastPlaybackEvent;
   }
 
   /**
@@ -321,13 +330,8 @@ export class RoomAudioOutput extends EventEmitter {
       return;
     }
 
-    if (this.playbackFinishedResolver || this.currentSegmentDurationSeconds > 0) {
+    if (this.currentSegmentDurationSeconds > 0) {
       this.clearBuffer();
-    } else {
-      this.clearActivePlaybackTimer();
-      this.currentSegmentDurationSeconds = 0;
-      this.playbackStartedAtMs = null;
-      this.firstFrameEmitted = false;
     }
 
     try {
@@ -350,29 +354,29 @@ export class RoomAudioOutput extends EventEmitter {
    * @param event - Playback-finished payload for the current segment.
    */
   private finishPlaybackSegment(event: PlaybackFinishedEvent): void {
-    this.clearActivePlaybackTimer();
     this.lastPlaybackEvent = event;
     this.currentSegmentDurationSeconds = 0;
     this.playbackStartedAtMs = null;
     this.firstFrameEmitted = false;
-
-    if (this.playbackFinishedResolver) {
-      this.playbackFinishedResolver(event);
-      this.playbackFinishedResolver = null;
-    }
-
-    this.playbackFinishedPromise = Promise.resolve(event);
+    this.segmentCapturing = false;
+    this.playbackFinishedCount += 1;
+    this.playbackSignal.resolve();
     this.emit(AUDIO_OUTPUT_EVENT_PLAYBACK_FINISHED, event);
   }
 
   /**
-   * Clears the active timer without mutating segment state.
+   * Creates one deferred playback signal used by waiters.
    */
-  private clearActivePlaybackTimer(): void {
-    if (this.playbackTimer) {
-      clearTimeout(this.playbackTimer);
-      this.playbackTimer = null;
-    }
+  private createPlaybackSignal(): {
+    promise: Promise<void>;
+    resolve: () => void;
+  } {
+    let resolve!: () => void;
+    const promise = new Promise<void>((innerResolve) => {
+      resolve = innerResolve;
+    });
+
+    return { promise, resolve };
   }
 
   /**

@@ -14,6 +14,25 @@ const ORIGINAL_ENV = { ...process.env };
 
 type OrchestratorModule = typeof import("./orchestrator.js");
 
+type HealthServerLifecycleStub = {
+  healthServer: unknown | null;
+  healthServerPort: number | null;
+  startHealthServer(): Promise<void>;
+  closeHealthServer(): Promise<void>;
+};
+
+type DetachedTaskHarness = {
+  runDetachedTask(
+    task: Promise<void>,
+    context: {
+      stage: string;
+      roomId: string;
+      agentId?: string;
+      attempt?: number;
+    },
+  ): void;
+};
+
 /**
  * Minimal logger double used by orchestrator tests.
  *
@@ -91,17 +110,19 @@ async function importOrchestratorModule(
  * @param module - Imported orchestrator module to patch.
  */
 function stubHealthServerLifecycle(module: OrchestratorModule): void {
-  vi.spyOn(module.Orchestrator.prototype as any, "startHealthServer")
-    .mockImplementation(async function startHealthServerStub(this: {
-      healthServerPort: number | null;
-    }) {
+  const orchestratorPrototype =
+    module.Orchestrator.prototype as unknown as HealthServerLifecycleStub;
+
+  vi.spyOn(orchestratorPrototype, "startHealthServer")
+    .mockImplementation(async function startHealthServerStub(
+      this: HealthServerLifecycleStub,
+    ) {
       this.healthServerPort = 0;
     });
-  vi.spyOn(module.Orchestrator.prototype as any, "closeHealthServer")
-    .mockImplementation(async function closeHealthServerStub(this: {
-      healthServer: unknown | null;
-      healthServerPort: number | null;
-    }) {
+  vi.spyOn(orchestratorPrototype, "closeHealthServer")
+    .mockImplementation(async function closeHealthServerStub(
+      this: HealthServerLifecycleStub,
+    ) {
       this.healthServer = null;
       this.healthServerPort = null;
     });
@@ -165,9 +186,13 @@ function createRoom(roomId: string) {
  * Runner double used by orchestrator tests.
  */
 class FakeRunner extends EventEmitter {
+  private executingTurn = false;
+
   private ready = false;
 
-  public readonly requestTurn = vi.fn(async () => undefined);
+  public readonly requestTurn = vi.fn(async () => {
+    this.executingTurn = true;
+  });
 
   public readonly start = vi.fn(async () => {
     this.ready = true;
@@ -178,6 +203,7 @@ class FakeRunner extends EventEmitter {
   });
 
   public readonly stop = vi.fn(async () => {
+    this.executingTurn = false;
     this.ready = false;
     this.emit("stopped", {
       roomId: this.roomId,
@@ -210,6 +236,20 @@ class FakeRunner extends EventEmitter {
    */
   public isReady(): boolean {
     return this.ready;
+  }
+
+  /**
+   * Returns whether the fake runner is in the middle of a turn.
+   */
+  public isExecutingTurn(): boolean {
+    return this.executingTurn;
+  }
+
+  /**
+   * Test helper for explicitly setting turn-execution state.
+   */
+  public setExecutingTurn(executingTurn: boolean): void {
+    this.executingTurn = executingTurn;
   }
 }
 
@@ -902,10 +942,95 @@ describe("Orchestrator", () => {
   });
 
   /**
+   * Dead-air recovery must not queue a second host turn while some runner is
+   * already actively executing a turn for the room.
+   */
+  it("releases the dead-air claim when a room already has an executing turn", async () => {
+    const module = await importOrchestratorModule();
+    const currentRooms = [createRoom("room-a")];
+    const runners = new Map<string, FakeRunner[]>();
+    const silenceTimers = new Map<string, FakeSilenceTimer>();
+    const floorControllers = new Map<string, ReturnType<typeof createFloorController>>();
+    const createRunner = vi.fn((options: {
+      room: { roomId: string };
+      agent: AgentRuntimeProfile;
+    }) => {
+      const runner = new FakeRunner(options.room.roomId, options.agent);
+      const key = `${options.room.roomId}:${options.agent.id}`;
+      const entries = runners.get(key) ?? [];
+
+      entries.push(runner);
+      runners.set(key, entries);
+      return runner;
+    });
+    const orchestrator = new module.Orchestrator({
+      captureRuntimeError: (logger, error) => (logger.error(error), error as Error),
+      closeDatabasePool: async () => undefined,
+      closeRedis: async () => undefined,
+      connectRedis: async () => undefined,
+      createFloorController: (roomId: string) => {
+        const controller = createFloorController();
+
+        floorControllers.set(roomId, controller);
+        return controller;
+      },
+      createRunner,
+      createSilenceTimer: (_floorController, roomId) => {
+        const timer = new FakeSilenceTimer();
+
+        silenceTimers.set(roomId, timer);
+        return timer;
+      },
+      logger: createLogger(),
+      pingRedis: async () => undefined,
+      pollIntervalMs: 60_000,
+      roomRepository: {
+        listActiveRooms: vi.fn(async () => currentRooms),
+      },
+      testDatabaseConnection: async () => ({
+        databaseName: "postgres",
+        serverTime: "2026-03-28 12:00:00+00",
+      }),
+      transcriptRepository: {
+        insertTranscriptEvent: vi.fn(async () => undefined),
+        listRecentByRoomId: vi.fn(async () => []),
+      },
+      healthPort: 0,
+    });
+
+    await orchestrator.start();
+    const hostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
+    const floorController = floorControllers.get("room-a");
+    await vi.waitFor(() => {
+      expect(hostRunner?.requestTurn).toHaveBeenCalledTimes(1);
+    });
+
+    hostRunner?.setExecutingTurn(true);
+    hostRunner?.requestTurn.mockClear();
+    floorController?.setHolder(HOST_AGENT.id);
+    floorController?.releaseFloor.mockClear();
+
+    silenceTimers.get("room-a")?.emit("deadAirDetected", {
+      detectedAt: Date.parse("2026-03-28T12:00:30.000Z"),
+      hostAgentId: HOST_AGENT.id,
+      prompt: "The room is quiet. Restart the argument with a sharper question.",
+      roomId: "room-a",
+      silenceDurationMs: 5_000,
+      silenceStartedAt: Date.parse("2026-03-28T12:00:25.000Z"),
+    });
+    await flushMicrotasks();
+
+    expect(hostRunner?.requestTurn).not.toHaveBeenCalled();
+    expect(floorController?.releaseFloor).toHaveBeenCalledWith(HOST_AGENT.id);
+
+    await orchestrator.stop();
+  });
+
+  /**
    * Detached turn-scheduling failures must be captured explicitly instead of
    * surfacing as unhandled promise rejections.
    */
-  it("captures post-turn scheduling failures from detached runner callbacks", async () => {
+  it("captures detached post-turn scheduling failures", async () => {
     const module = await importOrchestratorModule();
     const currentRooms = [createRoom("room-a")];
     const runners = new Map<string, FakeRunner[]>();
@@ -924,6 +1049,17 @@ describe("Orchestrator", () => {
       return runner;
     });
     const orchestrator = new module.Orchestrator({
+      captureRuntimeError: (capturedLogger, error, context) => {
+        capturedLogger.error(
+          {
+            ...context,
+            err: error,
+          },
+          "Captured agents runtime error.",
+        );
+
+        return error as Error;
+      },
       closeDatabasePool: async () => undefined,
       closeRedis: async () => undefined,
       connectRedis: async () => undefined,
@@ -956,27 +1092,28 @@ describe("Orchestrator", () => {
     await orchestrator.start();
     await flushMicrotasks();
 
-    const floorController = floorControllers.get("room-a");
-    const participantRunner = runners.get(`room-a:${PARTICIPANT_AGENT.id}`)?.[0];
+    const hostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
+    const schedulingError = new Error("participant scheduling failed");
 
-    participantRunner?.requestTurn.mockClear();
-    participantRunner?.requestTurn.mockRejectedValueOnce(
-      new Error("participant scheduling failed"),
+    hostRunner?.setExecutingTurn(false);
+    await hostRunner?.stop();
+    const detachedTaskHarness = orchestrator as unknown as DetachedTaskHarness;
+
+    detachedTaskHarness.runDetachedTask(
+      Promise.reject(schedulingError),
+      {
+        stage: "turn_completed_schedule",
+        roomId: "room-a",
+        agentId: PARTICIPANT_AGENT.id,
+      },
     );
-    floorController?.setHolder(null);
-    participantRunner?.emit("turnCompleted", {
-      roomId: "room-a",
-      agentId: PARTICIPANT_AGENT.id,
-      turnCount: 1,
-      lastSpokeAt: Date.parse("2026-03-28T12:00:30.000Z"),
-    });
     await vi.waitFor(() => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.objectContaining({
           stage: "turn_completed_schedule",
           roomId: "room-a",
           agentId: PARTICIPANT_AGENT.id,
-          err: expect.any(Error),
+          err: schedulingError,
         }),
         "Captured agents runtime error.",
       );
