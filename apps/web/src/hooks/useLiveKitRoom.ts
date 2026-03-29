@@ -33,6 +33,7 @@ import {
 import type { ConnectionState } from "@/types";
 
 const LIVEKIT_RETRY_DELAYS_MS = [0, 500, 1_000, 2_000] as const;
+const LIVEKIT_CONNECT_TIMEOUT_MS = 12_000;
 
 export interface UseLiveKitRoomOptions {
   roomId: string;
@@ -120,6 +121,65 @@ function waitForDelay(delayMs: number, signal: AbortSignal): Promise<void> {
     }
 
     signal.addEventListener("abort", handleAbort, { once: true });
+  });
+}
+
+/**
+ * Resolves or rejects with the supplied promise, but fails fast if the current
+ * connection attempt exceeds Murmur's listener-connect budget.
+ *
+ * LiveKit can otherwise remain pending for an unbounded period when the
+ * websocket endpoint is unreachable or misconfigured, which leaves the room UI
+ * stuck on an infinite spinner without surfacing a usable error.
+ *
+ * @param operation - Room-connection promise for the current attempt.
+ * @param timeoutMs - Maximum time to wait before rejecting the attempt.
+ * @param signal - Abort signal tied to the current connection generation.
+ * @param liveKitUrl - Endpoint being dialed, used in the timeout diagnostic.
+ * @returns The resolved operation value.
+ */
+function withConnectTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  signal: AbortSignal,
+  liveKitUrl: string,
+): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      signal.removeEventListener("abort", handleAbort);
+      reject(
+        new Error(
+          `Timed out connecting to LiveKit after ${timeoutMs}ms. Check NEXT_PUBLIC_LIVEKIT_URL and confirm the browser can reach ${liveKitUrl}.`,
+        ),
+      );
+    }, timeoutMs);
+
+    function cleanup() {
+      window.clearTimeout(timeoutId);
+      signal.removeEventListener("abort", handleAbort);
+    }
+
+    function handleAbort() {
+      cleanup();
+      reject(createAbortError());
+    }
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+
+    operation.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error) => {
+        cleanup();
+        reject(error);
+      },
+    );
   });
 }
 
@@ -433,10 +493,15 @@ export function useLiveKitRoom({
       };
 
       try {
-        await nextRoom.connect(
+        await withConnectTimeout(
+          nextRoom.connect(
+            liveKitUrl,
+            normalizedToken,
+            LIVEKIT_CONNECT_OPTIONS,
+          ),
+          LIVEKIT_CONNECT_TIMEOUT_MS,
+          abortController.signal,
           liveKitUrl,
-          normalizedToken,
-          LIVEKIT_CONNECT_OPTIONS,
         );
 
         if (abortController.signal.aborted || operationIdRef.current !== operationId) {
