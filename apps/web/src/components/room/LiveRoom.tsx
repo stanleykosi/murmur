@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   startTransition,
+  useCallback,
   useEffect,
   useEffectEvent,
   useRef,
@@ -428,7 +429,7 @@ export default function LiveRoom({
    * the UI can render room details immediately while the audio transport
    * finishes connecting in the background.
    */
-  const runJoinFlow = useEffectEvent(async () => {
+  const runJoinFlow = useCallback(async () => {
     const operationId = joinOperationIdRef.current + 1;
     joinOperationIdRef.current = operationId;
     setIsJoining(true);
@@ -477,15 +478,15 @@ export default function LiveRoom({
         setIsJoining(false);
       }
     }
-  });
+  }, [disconnect, getToken, roomId, withAuthTokenTimeout, withJoinTimeout]);
 
   /**
    * Re-runs the full room join sequence after an explicit retry request.
    */
-  const handleRetryJoin = useEffectEvent(async () => {
+  const handleRetryJoin = useCallback(async () => {
     autoJoinTriggeredRef.current = true;
     await runJoinFlow();
-  });
+  }, [runJoinFlow]);
 
   /**
    * Leaves the room and returns the listener to the lobby.
