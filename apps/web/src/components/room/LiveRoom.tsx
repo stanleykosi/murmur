@@ -343,14 +343,6 @@ export default function LiveRoom({
     preferCachedAuth,
     silent,
   }: LeaveRoomOptions) => {
-    joinOperationIdRef.current += 1;
-    disconnect();
-
-    if (clearState) {
-      setLivekitToken(null);
-      setCentrifugoToken(null);
-    }
-
     if (!hasJoinedRoomRef.current || hasLeftRoomRef.current) {
       return;
     }
@@ -358,6 +350,14 @@ export default function LiveRoom({
     if (leaveRequestRef.current !== null) {
       await leaveRequestRef.current;
       return;
+    }
+
+    joinOperationIdRef.current += 1;
+    disconnect();
+
+    if (clearState) {
+      setLivekitToken(null);
+      setCentrifugoToken(null);
     }
 
     leaveRequestRef.current = (async () => {

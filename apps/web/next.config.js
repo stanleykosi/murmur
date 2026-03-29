@@ -10,7 +10,7 @@ const path = require("node:path");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   transpilePackages: ["@murmur/shared"],
   turbopack: {
     root: path.resolve(__dirname, "../.."),
