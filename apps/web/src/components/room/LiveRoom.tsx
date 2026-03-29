@@ -52,6 +52,7 @@ import TranscriptPanel from "./TranscriptPanel";
 const ROOM_ENDED_REDIRECT_DELAY_SECONDS = 5;
 const ROOM_JOIN_TIMEOUT_MS = 15_000;
 const ROOM_TRANSPORT_CONNECT_TIMEOUT_MS = 15_000;
+const ROOM_INITIAL_LOADING_TIMEOUT_MS = 15_000;
 
 /**
  * Props for the live-room runtime.
@@ -660,6 +661,24 @@ export default function LiveRoom({
     roomEndedAt === null &&
     !isLeaving &&
     (isJoining || connectionState === "connecting" || effectiveError !== null);
+
+  useEffect(() => {
+    if (!showInitialLoadingState || joinError !== null) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setJoinError(
+        new Error(
+          `Timed out leaving the room bootstrap screen after ${ROOM_INITIAL_LOADING_TIMEOUT_MS}ms. The browser never completed the client-side room join bootstrap.`,
+        ),
+      );
+    }, ROOM_INITIAL_LOADING_TIMEOUT_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [joinError, showInitialLoadingState]);
 
   if (showAuthGate) {
     return (
