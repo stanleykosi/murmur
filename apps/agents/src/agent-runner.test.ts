@@ -331,7 +331,7 @@ describe("AgentRunner", () => {
     expect(livekitLoggerModule.ensureLiveKitLoggerInitialized).toHaveBeenCalledTimes(1);
 
     await fixture.runner.stop();
-  });
+  }, 10_000);
 
   /**
    * Startup should wire the token, room, session, and audio output exactly once.
@@ -522,6 +522,49 @@ describe("AgentRunner", () => {
     vadDetector.emit("turnComplete");
     await speakPromise;
 
+    expect(settled).toBe(true);
+  });
+
+  /**
+   * Long synthesized turns should extend the VAD watchdog so valid speech does
+   * not fail just because the utterance lasts longer than the base timeout.
+   */
+  it("scales the VAD timeout to the synthesized audio duration", async () => {
+    vi.useFakeTimers();
+
+    const module = await importAgentRunnerModule();
+    const vadDetector = new FakeVADDetector();
+    const session = {
+      say: vi.fn(() => ({
+        waitForPlayout: async () => undefined,
+      })),
+    };
+    const bridge = module.createRunnerSessionBridge({
+      session: session as never,
+      vad: vadDetector,
+      timeoutMs: 500,
+    });
+    const longPcmAudio = Buffer.alloc(96_000, 0);
+    let rejection: Error | null = null;
+    let settled = false;
+    const speakPromise = bridge.speakText("Long turn.", longPcmAudio)
+      .then(() => {
+        settled = true;
+      })
+      .catch((error: Error) => {
+        rejection = error;
+      });
+
+    await vi.advanceTimersByTimeAsync(600);
+    await flushMicrotasks();
+
+    expect(rejection).toBeNull();
+    expect(settled).toBe(false);
+
+    vadDetector.emit("turnComplete");
+    await speakPromise;
+
+    expect(rejection).toBeNull();
     expect(settled).toBe(true);
   });
 

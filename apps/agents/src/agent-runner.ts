@@ -54,6 +54,7 @@ const VAD_SAMPLE_RATE = 16_000;
 const VAD_CHANNELS = 1;
 const VAD_SILENCE_FRAME_DURATION_MS = 100;
 const VAD_TURN_COMPLETE_TIMEOUT_MS = 10_000;
+const VAD_TURN_COMPLETE_TIMEOUT_BUFFER_MS = 5_000;
 
 /**
  * Minimal logger surface required by the runner.
@@ -355,6 +356,43 @@ function pushTrailingSilenceToVad(vad: VADDetectorLike): void {
 }
 
 /**
+ * Calculates the synthesized audio duration represented by a frame sequence.
+ *
+ * The VAD completion watchdog must account for the full spoken turn length plus
+ * Murmur's fixed trailing-silence threshold, otherwise long but valid turns can
+ * time out before the detector has any chance to emit `turnComplete`.
+ *
+ * @param frames - PCM frames produced for one synthesized turn.
+ * @returns Total audio duration in milliseconds.
+ */
+function getAudioDurationMs(frames: ReadonlyArray<AudioFrame>): number {
+  return Math.ceil(
+    frames.reduce((durationMs, frame) => (
+      durationMs + ((frame.samplesPerChannel / frame.sampleRate) * 1000)
+    ), 0),
+  );
+}
+
+/**
+ * Resolves a per-turn VAD completion timeout that scales with audio duration.
+ *
+ * @param frames - PCM frames produced for one synthesized turn.
+ * @param minimumTimeoutMs - Caller-configured minimum timeout floor.
+ * @returns A timeout large enough for speech, silence threshold, and buffer.
+ */
+function resolveVadTurnCompleteTimeoutMs(
+  frames: ReadonlyArray<AudioFrame>,
+  minimumTimeoutMs: number,
+): number {
+  return Math.max(
+    minimumTimeoutMs,
+    getAudioDurationMs(frames)
+      + SILENCE_THRESHOLD_MS
+      + VAD_TURN_COMPLETE_TIMEOUT_BUFFER_MS,
+  );
+}
+
+/**
  * Creates the runner-specific session bridge that couples `session.say(...)`
  * with Murmur's local turn-complete VAD contract.
  *
@@ -391,6 +429,10 @@ export function createRunnerSessionBridge(
       }
 
       const audioFrames = convertPcmAudioToFrames(pcmAudio);
+      const resolvedTimeoutMs = resolveVadTurnCompleteTimeoutMs(
+        audioFrames,
+        timeoutMs,
+      );
       const resampler = new AudioResampler(
         audioFrames[0]?.sampleRate ?? 24_000,
         VAD_SAMPLE_RATE,
@@ -399,8 +441,8 @@ export function createRunnerSessionBridge(
       const turnCompletePromise = new Promise<void>((resolve, reject) => {
         const timeoutHandle = setTimeout(() => {
           cleanup();
-          reject(new Error(`Timed out waiting ${timeoutMs}ms for VAD turn completion.`));
-        }, timeoutMs);
+          reject(new Error(`Timed out waiting ${resolvedTimeoutMs}ms for VAD turn completion.`));
+        }, resolvedTimeoutMs);
         const handleTurnComplete = () => {
           cleanup();
           resolve();
