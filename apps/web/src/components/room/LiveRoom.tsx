@@ -14,9 +14,10 @@
  * rendered room payload and does not preserve the older preview-deck path.
  */
 
-import { RoomAudioRenderer, useAudioPlayback } from "@livekit/components-react";
+import { RoomAudioRenderer } from "@livekit/components-react";
 import { useAuth } from "@clerk/nextjs";
 import type { RoomEndedEvent } from "@murmur/shared";
+import { RoomEvent } from "livekit-client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -210,6 +211,7 @@ export default function LiveRoom({
   const [redirectCountdown, setRedirectCountdown] = useState(
     ROOM_ENDED_REDIRECT_DELAY_SECONDS,
   );
+  const [canPlayAudio, setCanPlayAudio] = useState(true);
   const autoJoinTriggeredRef = useRef(false);
   const joinOperationIdRef = useRef(0);
   const authTokenRef = useRef<string | null>(null);
@@ -250,10 +252,6 @@ export default function LiveRoom({
     initialCount: roomData?.listenerCount ?? 0,
     roomId,
   });
-  const {
-    canPlayAudio,
-    startAudio,
-  } = useAudioPlayback(liveKitRoom ?? undefined);
 
   /**
    * Returns the best available live listener count for the current room.
@@ -457,8 +455,13 @@ export default function LiveRoom({
    * Attempts to satisfy browser autoplay restrictions after the room connects.
    */
   const handleStartAudio = useEffectEvent(async () => {
+    if (liveKitRoom === null) {
+      return;
+    }
+
     try {
-      await startAudio();
+      await liveKitRoom.startAudio();
+      setCanPlayAudio(liveKitRoom.canPlaybackAudio);
     } catch (error) {
       pushToast({
         description:
@@ -562,6 +565,27 @@ export default function LiveRoom({
       });
     };
   }, [performLeave]);
+
+  useEffect(() => {
+    if (liveKitRoom === null) {
+      setCanPlayAudio(true);
+      return;
+    }
+
+    const currentRoom = liveKitRoom;
+
+    setCanPlayAudio(currentRoom.canPlaybackAudio);
+
+    function handleAudioPlaybackStatusChanged() {
+      setCanPlayAudio(currentRoom.canPlaybackAudio);
+    }
+
+    currentRoom.on(RoomEvent.AudioPlaybackStatusChanged, handleAudioPlaybackStatusChanged);
+
+    return () => {
+      currentRoom.off(RoomEvent.AudioPlaybackStatusChanged, handleAudioPlaybackStatusChanged);
+    };
+  }, [liveKitRoom]);
 
   const showAuthGate = isLoaded && !isSignedIn;
   const showInitialLoadingState =
