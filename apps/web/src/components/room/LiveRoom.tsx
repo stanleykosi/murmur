@@ -50,6 +50,7 @@ import RoomHeader from "./RoomHeader";
 import TranscriptPanel from "./TranscriptPanel";
 
 const ROOM_ENDED_REDIRECT_DELAY_SECONDS = 5;
+const ROOM_AUTH_TOKEN_TIMEOUT_MS = 10_000;
 const ROOM_JOIN_TIMEOUT_MS = 15_000;
 const ROOM_TRANSPORT_CONNECT_TIMEOUT_MS = 15_000;
 const ROOM_INITIAL_LOADING_TIMEOUT_MS = 15_000;
@@ -289,6 +290,29 @@ export default function LiveRoom({
     ]));
 
   /**
+   * Fails fast when Clerk token resolution stalls so the room bootstrap cannot
+   * hang forever before the protected join request even starts.
+   *
+   * @param operation - Pending Clerk token request.
+   * @returns The resolved token value.
+   */
+  const withAuthTokenTimeout = useEffectEvent(async (
+    operation: Promise<string | null>,
+  ): Promise<string | null> =>
+    await Promise.race([
+      operation,
+      new Promise<string | null>((_resolve, reject) => {
+        window.setTimeout(() => {
+          reject(
+            new Error(
+              `Timed out resolving the Clerk session token after ${ROOM_AUTH_TOKEN_TIMEOUT_MS}ms. The browser never finished preparing room authorization.`,
+            ),
+          );
+        }, ROOM_AUTH_TOKEN_TIMEOUT_MS);
+      }),
+    ]));
+
+  /**
    * Performs the canonical best-effort leave flow and prevents duplicate leave
    * submissions across explicit navigation, room-end handling, and unmount.
    *
@@ -301,7 +325,9 @@ export default function LiveRoom({
       return authTokenRef.current;
     }
 
-    const freshToken = normalizeSessionToken(await getToken());
+    const freshToken = normalizeSessionToken(
+      await withAuthTokenTimeout(getToken()),
+    );
 
     if (freshToken !== null) {
       authTokenRef.current = freshToken;
@@ -418,7 +444,9 @@ export default function LiveRoom({
     setCentrifugoToken(null);
 
     try {
-      const freshAuthToken = normalizeSessionToken(await getToken());
+      const freshAuthToken = normalizeSessionToken(
+        await withAuthTokenTimeout(getToken()),
+      );
       const authToken = freshAuthToken ?? authTokenRef.current;
       const joinResponse = await withJoinTimeout(
         joinRoom(roomId, {
