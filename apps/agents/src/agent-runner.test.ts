@@ -732,6 +732,44 @@ describe("AgentRunner", () => {
   });
 
   /**
+   * Stop should not close the room audio output while an in-flight turn is
+   * still settling, because the synthetic speech boundary task may still be
+   * draining frames through that shared output.
+   */
+  it("waits for an in-flight turn before closing the room audio output", async () => {
+    const module = await importAgentRunnerModule();
+    let rejectSpeakText!: (error: Error) => void;
+    const fixture = createRunnerFixture(module, {
+      speakTextImplementation: async () => await new Promise<void>((_, reject) => {
+        rejectSpeakText = (error: Error) => {
+          reject(error);
+        };
+      }),
+    });
+
+    await fixture.runner.start();
+
+    const requestTurnPromise = fixture.runner.requestTurn();
+
+    await vi.waitFor(() => {
+      expect(fixture.sessionBridge.speakText).toHaveBeenCalledTimes(1);
+    });
+
+    const stopPromise = fixture.runner.stop();
+
+    await flushMicrotasks();
+    expect(fixture.audioOutput.close).not.toHaveBeenCalled();
+
+    rejectSpeakText(new Error("Synthetic speech bridge interrupted during stop."));
+    await expect(requestTurnPromise).rejects.toThrowError(
+      /Synthetic speech bridge interrupted during stop/i,
+    );
+    await stopPromise;
+
+    expect(fixture.audioOutput.close).toHaveBeenCalledTimes(1);
+  });
+
+  /**
    * Stop should wait for the session to shut down before tearing down the
    * custom audio output that the session may still be draining.
    */

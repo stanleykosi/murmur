@@ -50,6 +50,8 @@ import RoomHeader from "./RoomHeader";
 import TranscriptPanel from "./TranscriptPanel";
 
 const ROOM_ENDED_REDIRECT_DELAY_SECONDS = 5;
+const ROOM_JOIN_TIMEOUT_MS = 15_000;
+const ROOM_TRANSPORT_CONNECT_TIMEOUT_MS = 15_000;
 
 /**
  * Props for the live-room runtime.
@@ -264,6 +266,28 @@ export default function LiveRoom({
         : roomData.listenerCount;
 
   /**
+   * Fails fast when the protected join handshake exceeds Murmur's room-access
+   * budget so listeners do not remain trapped behind an indefinite loading
+   * panel with no diagnostics.
+   *
+   * @param operation - Pending join-handshake operation.
+   * @returns The resolved join result.
+   */
+  const withJoinTimeout = useEffectEvent(async <T,>(operation: Promise<T>): Promise<T> =>
+    await Promise.race([
+      operation,
+      new Promise<T>((_resolve, reject) => {
+        window.setTimeout(() => {
+          reject(
+            new Error(
+              `Timed out finalizing the room join after ${ROOM_JOIN_TIMEOUT_MS}ms. The API is reachable, but the browser did not finish entering the live room.`,
+            ),
+          );
+        }, ROOM_JOIN_TIMEOUT_MS);
+      }),
+    ]));
+
+  /**
    * Performs the canonical best-effort leave flow and prevents duplicate leave
    * submissions across explicit navigation, room-end handling, and unmount.
    *
@@ -395,9 +419,11 @@ export default function LiveRoom({
     try {
       const freshAuthToken = normalizeSessionToken(await getToken());
       const authToken = freshAuthToken ?? authTokenRef.current;
-      const joinResponse = await joinRoom(roomId, {
-        token: authToken,
-      });
+      const joinResponse = await withJoinTimeout(
+        joinRoom(roomId, {
+          token: authToken,
+        }),
+      );
 
       if (joinOperationIdRef.current !== operationId) {
         return;
@@ -407,12 +433,10 @@ export default function LiveRoom({
       hasJoinedRoomRef.current = true;
       hasLeftRoomRef.current = false;
 
-      startTransition(() => {
-        setRoomData(joinResponse.room);
-        setLivekitToken(joinResponse.livekitToken);
-        setCentrifugoToken(joinResponse.centrifugoToken);
-        setConnectSequence((currentSequence) => currentSequence + 1);
-      });
+      setRoomData(joinResponse.room);
+      setLivekitToken(joinResponse.livekitToken);
+      setCentrifugoToken(joinResponse.centrifugoToken);
+      setConnectSequence((currentSequence) => currentSequence + 1);
     } catch (error) {
       if (joinOperationIdRef.current !== operationId) {
         return;
@@ -519,6 +543,29 @@ export default function LiveRoom({
     setHasConnectedOnce(true);
     setJoinError(null);
   }, [connectionState]);
+
+  useEffect(() => {
+    if (
+      roomData === null ||
+      roomEndedAt !== null ||
+      isLeaving ||
+      connectionState !== "connecting"
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setJoinError(
+        new Error(
+          `Timed out establishing the live audio transport after ${ROOM_TRANSPORT_CONNECT_TIMEOUT_MS}ms. The room join succeeded, but LiveKit did not finish connecting in the browser.`,
+        ),
+      );
+    }, ROOM_TRANSPORT_CONNECT_TIMEOUT_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [connectionState, isLeaving, roomData, roomEndedAt]);
 
   useEffect(() => {
     if (roomEndedAt === null) {

@@ -905,6 +905,7 @@ export class AgentRunner extends EventEmitter {
     await this.ensureFloorReleased().catch(() => undefined);
 
     await (this.session?.close() ?? Promise.resolve()).catch(() => undefined);
+    await this.turnExecutionPromise.catch(() => undefined);
 
     await Promise.allSettled([
       this.vadDetector?.close() ?? Promise.resolve(),
@@ -912,7 +913,6 @@ export class AgentRunner extends EventEmitter {
     ]);
 
     await this.roomConnection?.disconnect().catch(() => undefined);
-    await this.turnExecutionPromise.catch(() => undefined);
 
     this.graph = null;
     this.graphState = null;
