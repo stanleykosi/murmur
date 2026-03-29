@@ -10,7 +10,6 @@ import type { Metadata } from "next";
 
 import LiveRoom from "@/components/room/LiveRoom";
 import { fetchRoom } from "@/lib/api";
-import type { Room } from "@/types";
 
 export const revalidate = 10;
 
@@ -21,24 +20,6 @@ interface RoomPageProps {
   params: Promise<{
     id: string;
   }>;
-}
-
-/**
- * Loads a room by ID and enforces the current rule that the room scaffold only
- * renders live rooms from the lobby flow.
- *
- * @param roomId - Room UUID extracted from the route params.
- * @returns The requested live room payload.
- * @throws {Error} When the room is not currently live.
- */
-async function loadLiveRoom(roomId: string): Promise<Room> {
-  const room = await fetchRoom(roomId);
-
-  if (room.status !== "live") {
-    throw new Error(`Room "${roomId}" is not currently live.`);
-  }
-
-  return room;
 }
 
 /**
@@ -56,7 +37,7 @@ export async function generateMetadata({
 }: Readonly<RoomPageProps>): Promise<Metadata> {
   try {
     const { id } = await params;
-    const room = await loadLiveRoom(id);
+    const room = await fetchRoom(id);
 
     return {
       title: room.title,
@@ -88,7 +69,6 @@ export default async function RoomPage({
   params,
 }: Readonly<RoomPageProps>) {
   const { id } = await params;
-  await loadLiveRoom(id);
 
   return (
     <div className="page-shell">

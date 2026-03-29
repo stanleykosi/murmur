@@ -730,11 +730,13 @@ export default function LiveRoom({
         volume={volume}
       />
 
-      <RoomAudioRenderer
-        muted={isMuted}
-        volume={volume}
-        {...(liveKitRoom !== null ? { room: liveKitRoom } : {})}
-      />
+      {liveKitRoom !== null ? (
+        <RoomAudioRenderer
+          room={liveKitRoom}
+          muted={isMuted}
+          volume={volume}
+        />
+      ) : null}
 
       {showConnectionOverlay ? (
         <div className="room-live-overlay" aria-live="polite">
