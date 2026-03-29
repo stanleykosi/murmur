@@ -273,6 +273,7 @@ function createFloorController(mutedAgents: ReadonlySet<string> = new Set()) {
   const lastSpoke = new Map<string, number>();
 
   return {
+    clearSilenceStart: vi.fn(async () => undefined),
     claimFloor: vi.fn(async (agentId: string) => {
       if (currentHolder !== null || mutedAgents.has(agentId)) {
         return false;
@@ -390,7 +391,7 @@ describe("Orchestrator", () => {
    * Startup should recover any stale Redis floor claim before choosing the
    * first speaker for the freshly booted room runtime.
    */
-  it("releases a persisted floor claim before bootstrap scheduling", async () => {
+  it("clears persisted silence state and releases a persisted floor claim before bootstrap scheduling", async () => {
     const module = await importOrchestratorModule();
     const currentRooms = [createRoom("room-a")];
     const runners = new Map<string, FakeRunner[]>();
@@ -445,6 +446,7 @@ describe("Orchestrator", () => {
     const hostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
     const floorController = floorControllers.get("room-a");
 
+    expect(floorController?.clearSilenceStart).toHaveBeenCalledTimes(1);
     expect(floorController?.releaseFloor).toHaveBeenCalledWith(PARTICIPANT_AGENT.id);
     expect(hostRunner?.requestTurn).toHaveBeenCalledTimes(1);
 

@@ -94,7 +94,7 @@ export const OPENROUTER_DEFAULT_TEMPERATURE = 0.8;
  * Fail-fast timeout for OpenRouter requests so a stalled upstream call does not
  * block the room floor indefinitely.
  */
-export const OPENROUTER_REQUEST_TIMEOUT_MS = 35_000;
+export const OPENROUTER_REQUEST_TIMEOUT_MS = env.OPENROUTER_REQUEST_TIMEOUT_MS;
 const OPENROUTER_EMPTY_RESPONSE_RETRY_COUNT = 1;
 
 const openRouterLogger = pino({

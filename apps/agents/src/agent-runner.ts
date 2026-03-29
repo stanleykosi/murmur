@@ -1006,7 +1006,19 @@ export class AgentRunner extends EventEmitter {
           wasFiltered: event.wasFiltered,
         });
 
-        await this.transcriptPublisher.publishTranscript(event);
+        try {
+          await this.transcriptPublisher.publishTranscript(event);
+        } catch (error) {
+          this.logger.warn(
+            {
+              agentId: event.agentId,
+              eventId: event.id,
+              roomId: event.roomId,
+              err: error,
+            },
+            "Transcript event persisted locally but could not be broadcast to Centrifugo.",
+          );
+        }
       },
       finalizeTurn: async (input: FinalizeTurnInput): Promise<void> => {
         await this.options.floorController.releaseFloor(input.agentId);

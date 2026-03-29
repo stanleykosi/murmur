@@ -304,6 +304,7 @@ function createRunnerFixture(
     createAgentToken,
     createVadDetector,
     floorController,
+    logger,
     roomConnection,
     runner,
     session,
@@ -454,6 +455,41 @@ describe("AgentRunner", () => {
         turnCount: 1,
         lastSpokeAt: Date.parse("2026-03-28T12:00:30.000Z"),
       }),
+    );
+
+    await fixture.runner.stop();
+  });
+
+  /**
+   * Realtime broadcast failures should not invalidate a turn after the
+   * transcript has already been persisted locally.
+   */
+  it("keeps the turn successful when Centrifugo transcript broadcast fails", async () => {
+    const module = await importAgentRunnerModule();
+    const fixture = createRunnerFixture(module, {
+      publishTranscriptImplementation: async () => {
+        throw new Error("centrifugo unavailable");
+      },
+    });
+    const turnCompletedListener = vi.fn();
+
+    fixture.runner.on("turnCompleted", turnCompletedListener);
+    await fixture.runner.start();
+    await fixture.runner.requestTurn();
+
+    expect(fixture.transcriptRepository.insertTranscriptEvent).toHaveBeenCalledTimes(1);
+    expect(fixture.transcriptPublisher.publishTranscript).toHaveBeenCalledTimes(1);
+    expect(fixture.floorController.releaseFloor).toHaveBeenCalledWith(HOST_AGENT.id);
+    expect(turnCompletedListener).toHaveBeenCalledTimes(1);
+    expect(fixture.baseLLMProvider.generateResponse).toHaveBeenCalledTimes(1);
+    expect(fixture.ttsProvider.synthesize).toHaveBeenCalledTimes(1);
+    expect(fixture.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: HOST_AGENT.id,
+        roomId: "room-1",
+        err: expect.any(Error),
+      }),
+      "Transcript event persisted locally but could not be broadcast to Centrifugo.",
     );
 
     await fixture.runner.stop();
@@ -725,10 +761,10 @@ describe("AgentRunner", () => {
   });
 
   /**
-   * Transcript fan-out failures must stay explicit and still leave the floor in
-   * a released state for the rest of the room.
+   * Transcript fan-out failures should stay visible in logs without tearing
+   * down the runner after the local transcript write already succeeded.
    */
-  it("emits an error and releases the floor when transcript broadcasting fails", async () => {
+  it("keeps the runner ready when transcript broadcasting fails", async () => {
     const module = await importAgentRunnerModule();
     const fixture = createRunnerFixture(module, {
       publishTranscriptImplementation: async () => {
@@ -740,13 +776,12 @@ describe("AgentRunner", () => {
     fixture.runner.on("error", errorListener);
     await fixture.runner.start();
 
-    await expect(fixture.runner.requestTurn()).rejects.toThrowError(/Centrifugo/i);
-    expect(errorListener).toHaveBeenCalledTimes(1);
-    expect(fixture.runner.isReady()).toBe(false);
+    await expect(fixture.runner.requestTurn()).resolves.toBeUndefined();
+    expect(errorListener).not.toHaveBeenCalled();
+    expect(fixture.runner.isReady()).toBe(true);
     expect(fixture.floorController.releaseFloor).toHaveBeenCalledWith(HOST_AGENT.id);
-    await expect(fixture.runner.requestTurn()).rejects.toThrowError(
-      /must complete before requestTurn|no longer available/i,
-    );
+    await expect(fixture.runner.requestTurn()).resolves.toBeUndefined();
+    expect(fixture.logger.warn).toHaveBeenCalled();
 
     await fixture.runner.stop();
   });

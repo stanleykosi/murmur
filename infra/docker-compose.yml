@@ -39,13 +39,13 @@ services:
       - -c
       - /centrifugo/config.json
     ports:
-      - "8000:8000"
+      - "8080:8080"
     volumes:
       - ./centrifugo.json:/centrifugo/config.json:ro
     healthcheck:
       test:
         - CMD-SHELL
-        - wget -q -O - http://127.0.0.1:8000/health > /dev/null
+        - wget -q -O - http://127.0.0.1:8080/health > /dev/null
       interval: 10s
       timeout: 5s
       retries: 5

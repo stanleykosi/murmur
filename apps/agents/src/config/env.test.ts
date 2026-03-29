@@ -84,6 +84,7 @@ describe("agent env", () => {
       DATABASE_URL: "postgresql://postgres:secret@example.com:5432/postgres",
       OPENROUTER_DEFAULT_MODEL: module.DEFAULT_OPENROUTER_MODEL,
       OPENROUTER_DEFAULT_MAX_TOKENS: module.DEFAULT_OPENROUTER_MAX_TOKENS,
+      OPENROUTER_REQUEST_TIMEOUT_MS: module.DEFAULT_OPENROUTER_REQUEST_TIMEOUT_MS,
       SENTRY_DSN: undefined,
     });
   });
@@ -102,11 +103,12 @@ describe("agent env", () => {
           REDIS_URL: " ",
           OPENROUTER_API_KEY: undefined,
           OPENROUTER_DEFAULT_MAX_TOKENS: "0",
+          OPENROUTER_REQUEST_TIMEOUT_MS: "0",
           SENTRY_DSN: "still-not-a-url",
         }),
       ),
     ).toThrowError(
-      /DATABASE_URL|REDIS_URL|OPENROUTER_API_KEY|OPENROUTER_DEFAULT_MAX_TOKENS|SENTRY_DSN/,
+      /DATABASE_URL|REDIS_URL|OPENROUTER_API_KEY|OPENROUTER_DEFAULT_MAX_TOKENS|OPENROUTER_REQUEST_TIMEOUT_MS|SENTRY_DSN/,
     );
   });
 

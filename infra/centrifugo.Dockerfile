@@ -6,9 +6,10 @@ FROM centrifugo/centrifugo:v6.6.2
 
 COPY infra/centrifugo.json /centrifugo/config.json
 
-EXPOSE 8000
+EXPOSE 8080
 
-# Railway injects PORT dynamically for public networking and health checks.
-# Centrifugo's supported HTTP port flag is `-p` / `--http_server.port`, not
-# `--port`, so we bind with the documented flag and default to 8000 locally.
-CMD ["sh", "-lc", "centrifugo -c /centrifugo/config.json -p ${PORT:-8000}"]
+# Railway private networking still connects to the process's real listening
+# port, so Murmur standardizes Centrifugo on 8080 for both local and Railway
+# deployments. Set the service-level PORT variable to 8080 in Railway so
+# private-domain callers can use a stable internal URL with :8080.
+CMD ["sh", "-lc", "centrifugo -c /centrifugo/config.json -p ${PORT:-8080}"]

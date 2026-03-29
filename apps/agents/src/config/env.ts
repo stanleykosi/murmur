@@ -22,6 +22,11 @@ export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o";
 export const DEFAULT_OPENROUTER_MAX_TOKENS = 300;
 
 /**
+ * Canonical fallback timeout for one OpenRouter request.
+ */
+export const DEFAULT_OPENROUTER_REQUEST_TIMEOUT_MS = 60_000;
+
+/**
  * Builds a trimmed, required non-empty string validator for secret-like values.
  *
  * @param label - Human-readable variable name used in validation messages.
@@ -143,6 +148,10 @@ const AgentEnvSchema = z.object({
   OPENROUTER_DEFAULT_MAX_TOKENS: optionalPositiveInteger(
     "OPENROUTER_DEFAULT_MAX_TOKENS",
     DEFAULT_OPENROUTER_MAX_TOKENS,
+  ),
+  OPENROUTER_REQUEST_TIMEOUT_MS: optionalPositiveInteger(
+    "OPENROUTER_REQUEST_TIMEOUT_MS",
+    DEFAULT_OPENROUTER_REQUEST_TIMEOUT_MS,
   ),
   CARTESIA_API_KEY: requiredString("CARTESIA_API_KEY"),
   ELEVENLABS_API_KEY: requiredString("ELEVENLABS_API_KEY"),

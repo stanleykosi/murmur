@@ -98,6 +98,7 @@ export interface RoomSilenceTimerLike {
  * Minimal floor-controller surface required by the orchestrator.
  */
 export interface OrchestratorFloorController {
+  clearSilenceStart(): Promise<void>;
   claimFloor(agentId: string): Promise<boolean>;
   getAgentLastSpoke(agentId: string): Promise<number | null>;
   getCurrentHolder(): Promise<string | null>;
@@ -531,7 +532,7 @@ export class Orchestrator {
         await runner.start();
       }
 
-      await this.reconcileBootstrapFloorClaim(room.id, floorController);
+      await this.reconcileBootstrapRoomState(room.id, floorController);
       this.roomRuntimes.set(room.id, roomRuntime);
       roomRuntime.silenceTimer.start();
       this.runDetachedTask(
@@ -615,15 +616,17 @@ export class Orchestrator {
   }
 
   /**
-   * Releases any persisted floor claim left behind by a previous runtime.
+   * Clears persisted bootstrap state left behind by a previous runtime.
    *
    * @param roomId - Room identifier currently being bootstrapped.
    * @param floorController - Room-scoped floor controller used for cleanup.
    */
-  private async reconcileBootstrapFloorClaim(
+  private async reconcileBootstrapRoomState(
     roomId: string,
     floorController: OrchestratorFloorController,
   ): Promise<void> {
+    await floorController.clearSilenceStart();
+
     const currentHolder = await floorController.getCurrentHolder();
 
     if (currentHolder === null) {
