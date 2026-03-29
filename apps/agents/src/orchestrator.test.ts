@@ -330,6 +330,7 @@ describe("Orchestrator", () => {
     });
 
     await orchestrator.start();
+    await flushMicrotasks();
 
     const hostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
     const participantRunner = runners.get(`room-a:${PARTICIPANT_AGENT.id}`)?.[0];
@@ -399,6 +400,7 @@ describe("Orchestrator", () => {
     });
 
     await orchestrator.start();
+    await flushMicrotasks();
 
     const hostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
     const floorController = floorControllers.get("room-a");
@@ -666,6 +668,7 @@ describe("Orchestrator", () => {
     });
 
     await orchestrator.start();
+    await flushMicrotasks();
 
     const floorController = floorControllers.get("room-a");
     const initialHostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
@@ -731,6 +734,7 @@ describe("Orchestrator", () => {
     });
 
     await orchestrator.start();
+    await flushMicrotasks();
 
     const hostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
     const participantRunner = runners.get(`room-a:${PARTICIPANT_AGENT.id}`)?.[0];
@@ -950,6 +954,7 @@ describe("Orchestrator", () => {
     });
 
     await orchestrator.start();
+    await flushMicrotasks();
 
     const floorController = floorControllers.get("room-a");
     const participantRunner = runners.get(`room-a:${PARTICIPANT_AGENT.id}`)?.[0];

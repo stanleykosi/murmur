@@ -558,6 +558,19 @@ export class VADDetector extends EventEmitter {
   }
 
   /**
+   * Marks the detector as actively tracking one synthetic agent utterance.
+   *
+   * The runner feeds pre-synthesized TTS frames into the detector. Some voices
+   * may not reliably trigger Silero's `START_OF_SPEECH` event, but Murmur still
+   * needs the downstream silence accounting to complete that known utterance.
+   */
+  public beginSyntheticUtterance(): void {
+    this.ensureOpen();
+    this.hasActiveUtterance = true;
+    this.turnCompleteEmitted = false;
+  }
+
+  /**
    * Closes the wrapper and the underlying plugin runtime.
    */
   public async close(): Promise<void> {

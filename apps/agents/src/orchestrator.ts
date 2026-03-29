@@ -527,7 +527,13 @@ export class Orchestrator {
       await this.reconcileBootstrapFloorClaim(room.id, floorController);
       this.roomRuntimes.set(room.id, roomRuntime);
       roomRuntime.silenceTimer.start();
-      await this.scheduleNextSpeaker(room.id, "room_bootstrap");
+      this.runDetachedTask(
+        this.scheduleNextSpeaker(room.id, "room_bootstrap"),
+        {
+          stage: "room_bootstrap_schedule",
+          roomId: room.id,
+        },
+      );
     } catch (error) {
       this.roomRuntimes.delete(room.id);
       await this.disposeRoomRuntime(roomRuntime);

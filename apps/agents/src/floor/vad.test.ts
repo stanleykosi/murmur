@@ -552,6 +552,45 @@ describe("VADDetector", () => {
     await detector.close();
   });
 
+  it("allows a synthetic utterance to complete without a plugin speech-start event", async () => {
+    const fixture = createSileroFixture();
+
+    sileroLoadMock.mockResolvedValue(fixture.vad);
+
+    const detector = await VADDetector.load({
+      now: () => 999,
+    });
+    const turnCompleteHandler = vi.fn<(payload: VADDetectorEventPayload) => void>();
+
+    detector.on("turnComplete", turnCompleteHandler);
+    detector.beginSyntheticUtterance();
+    fixture.stream.enqueue(
+      createVADEvent(VADEventType.INFERENCE_DONE, {
+        probability: 0.05,
+        rawAccumulatedSilence: SILENCE_THRESHOLD_MS,
+        silenceDuration: SILENCE_THRESHOLD_MS,
+        speaking: false,
+        speechDuration: 0,
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(turnCompleteHandler).toHaveBeenCalledTimes(1);
+    });
+
+    expect(turnCompleteHandler).toHaveBeenCalledWith({
+      frames: expect.any(Array),
+      inferenceDurationMs: 32,
+      probability: 0.05,
+      samplesIndex: 512,
+      silenceDurationMs: SILENCE_THRESHOLD_MS,
+      speechDurationMs: 0,
+      timestampMs: 999,
+    });
+
+    await detector.close();
+  });
+
   it("fails fast on invalid options", async () => {
     await expect(
       VADDetector.load({

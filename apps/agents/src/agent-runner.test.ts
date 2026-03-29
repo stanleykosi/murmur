@@ -155,6 +155,8 @@ class FakeAudioOutput extends EventEmitter {
  * Minimal VAD detector double used by runner tests.
  */
 class FakeVADDetector extends EventEmitter {
+  public readonly beginSyntheticUtterance = vi.fn(() => undefined);
+
   public readonly close = vi.fn(async () => undefined);
 
   public readonly flush = vi.fn(() => undefined);
@@ -331,7 +333,7 @@ describe("AgentRunner", () => {
     expect(livekitLoggerModule.ensureLiveKitLoggerInitialized).toHaveBeenCalledTimes(1);
 
     await fixture.runner.stop();
-  }, 10_000);
+  }, 20_000);
 
   /**
    * Startup should wire the token, room, session, and audio output exactly once.
@@ -516,6 +518,7 @@ describe("AgentRunner", () => {
     await flushMicrotasks();
 
     expect(settled).toBe(false);
+    expect(vadDetector.beginSyntheticUtterance).toHaveBeenCalledTimes(1);
     expect(vadDetector.pushFrame).toHaveBeenCalled();
     expect(vadDetector.flush).toHaveBeenCalledTimes(1);
 

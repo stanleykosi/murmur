@@ -120,6 +120,7 @@ export interface AgentSessionLike {
  * Minimal VAD surface required by the runner bridge.
  */
 export interface VADDetectorLike {
+  beginSyntheticUtterance?(): void;
   pushFrame(frame: AudioFrame): void;
   flush(): void;
   close(): Promise<void>;
@@ -460,6 +461,8 @@ export function createRunnerSessionBridge(
         options.vad.on("turnComplete", handleTurnComplete);
         options.vad.on("error", handleError);
       });
+
+      options.vad.beginSyntheticUtterance?.();
 
       for (const frame of audioFrames) {
         for (const resampledFrame of resampler.push(frame)) {
