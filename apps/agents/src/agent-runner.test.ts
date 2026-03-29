@@ -487,10 +487,12 @@ describe("AgentRunner", () => {
   });
 
   /**
-   * The runner-local bridge should not resolve until both audio playout and
-   * VAD turn completion have happened.
+   * The runner-local bridge should not resolve until audio playout finishes and
+   * Murmur's fixed trailing-silence boundary has elapsed.
    */
-  it("waits for both playout and VAD turn completion in the custom session bridge", async () => {
+  it("waits for both playout and the trailing silence boundary in the custom session bridge", async () => {
+    vi.useFakeTimers();
+
     const module = await importAgentRunnerModule();
     const vadDetector = new FakeVADDetector();
     let resolvePlayout!: () => void;
@@ -522,17 +524,22 @@ describe("AgentRunner", () => {
     expect(vadDetector.pushFrame).toHaveBeenCalled();
     expect(vadDetector.flush).toHaveBeenCalledTimes(1);
 
-    vadDetector.emit("turnComplete");
+    await vi.advanceTimersByTimeAsync(1_499);
+    await flushMicrotasks();
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
     await speakPromise;
 
     expect(settled).toBe(true);
   });
 
   /**
-   * Long synthesized turns should extend the VAD watchdog so valid speech does
-   * not fail just because the utterance lasts longer than the base timeout.
+   * Long synthesized turns should extend the synthetic turn-boundary watchdog
+   * so valid speech does not fail just because the utterance lasts longer than
+   * the base timeout floor.
    */
-  it("scales the VAD timeout to the synthesized audio duration", async () => {
+  it("scales the synthetic turn-boundary timeout to the synthesized audio duration", async () => {
     vi.useFakeTimers();
 
     const module = await importAgentRunnerModule();
@@ -564,7 +571,7 @@ describe("AgentRunner", () => {
     expect(rejection).toBeNull();
     expect(settled).toBe(false);
 
-    vadDetector.emit("turnComplete");
+    await vi.advanceTimersByTimeAsync(1_500);
     await speakPromise;
 
     expect(rejection).toBeNull();

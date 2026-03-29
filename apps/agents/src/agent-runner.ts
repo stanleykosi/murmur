@@ -53,8 +53,8 @@ import {
 const VAD_SAMPLE_RATE = 16_000;
 const VAD_CHANNELS = 1;
 const VAD_SILENCE_FRAME_DURATION_MS = 100;
-const VAD_TURN_COMPLETE_TIMEOUT_MS = 10_000;
-const VAD_TURN_COMPLETE_TIMEOUT_BUFFER_MS = 5_000;
+const SYNTHETIC_TURN_BOUNDARY_TIMEOUT_MS = 10_000;
+const SYNTHETIC_TURN_BOUNDARY_TIMEOUT_BUFFER_MS = 5_000;
 
 /**
  * Minimal logger surface required by the runner.
@@ -375,13 +375,13 @@ function getAudioDurationMs(frames: ReadonlyArray<AudioFrame>): number {
 }
 
 /**
- * Resolves a per-turn VAD completion timeout that scales with audio duration.
+ * Resolves a per-turn synthetic speech-boundary timeout that scales with audio duration.
  *
  * @param frames - PCM frames produced for one synthesized turn.
  * @param minimumTimeoutMs - Caller-configured minimum timeout floor.
  * @returns A timeout large enough for speech, silence threshold, and buffer.
  */
-function resolveVadTurnCompleteTimeoutMs(
+function resolveSyntheticTurnBoundaryTimeoutMs(
   frames: ReadonlyArray<AudioFrame>,
   minimumTimeoutMs: number,
 ): number {
@@ -389,13 +389,26 @@ function resolveVadTurnCompleteTimeoutMs(
     minimumTimeoutMs,
     getAudioDurationMs(frames)
       + SILENCE_THRESHOLD_MS
-      + VAD_TURN_COMPLETE_TIMEOUT_BUFFER_MS,
+      + SYNTHETIC_TURN_BOUNDARY_TIMEOUT_BUFFER_MS,
   );
 }
 
 /**
+ * Sleeps for the requested number of milliseconds.
+ *
+ * @param durationMs - Delay duration in milliseconds.
+ * @returns A promise that resolves after the delay completes.
+ */
+function waitForDelay(durationMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
+}
+
+/**
  * Creates the runner-specific session bridge that couples `session.say(...)`
- * with Murmur's local turn-complete VAD contract.
+ * with Murmur's deterministic synthetic speech boundary: audio playout plus
+ * the fixed trailing silence threshold used for room turn-taking.
  *
  * @param options - LiveKit session, VAD detector, and optional timeout config.
  * @returns A graph-facing session bridge used by the speak node.
@@ -407,7 +420,7 @@ export function createRunnerSessionBridge(
     throw new Error("options must be an object.");
   }
 
-  const timeoutMs = options.timeoutMs ?? VAD_TURN_COMPLETE_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? SYNTHETIC_TURN_BOUNDARY_TIMEOUT_MS;
 
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("timeoutMs must be a positive finite number.");
@@ -430,7 +443,7 @@ export function createRunnerSessionBridge(
       }
 
       const audioFrames = convertPcmAudioToFrames(pcmAudio);
-      const resolvedTimeoutMs = resolveVadTurnCompleteTimeoutMs(
+      const resolvedTimeoutMs = resolveSyntheticTurnBoundaryTimeoutMs(
         audioFrames,
         timeoutMs,
       );
@@ -439,27 +452,37 @@ export function createRunnerSessionBridge(
         VAD_SAMPLE_RATE,
         VAD_CHANNELS,
       );
-      const turnCompletePromise = new Promise<void>((resolve, reject) => {
+      const playoutAndSilencePromise = new Promise<void>((resolve, reject) => {
         const timeoutHandle = setTimeout(() => {
           cleanup();
-          reject(new Error(`Timed out waiting ${resolvedTimeoutMs}ms for VAD turn completion.`));
+          reject(new Error(`Timed out waiting ${resolvedTimeoutMs}ms for synthetic turn completion.`));
         }, resolvedTimeoutMs);
-        const handleTurnComplete = () => {
-          cleanup();
-          resolve();
-        };
-        const handleError = (error: Error) => {
-          cleanup();
-          reject(error);
-        };
         const cleanup = () => {
           clearTimeout(timeoutHandle);
-          options.vad.off("turnComplete", handleTurnComplete);
-          options.vad.off("error", handleError);
+        };
+        const waitForSyntheticBoundary = async () => {
+          try {
+            const speechHandle = options.session.say(normalizedText, {
+              audio: createAudioFrameStream(audioFrames),
+              allowInterruptions: false,
+              addToChatCtx: false,
+            });
+
+            if (!speechHandle || typeof speechHandle.waitForPlayout !== "function") {
+              throw new Error("session.say(...) must return a speech handle with waitForPlayout().");
+            }
+
+            await speechHandle.waitForPlayout();
+            await waitForDelay(SILENCE_THRESHOLD_MS);
+            cleanup();
+            resolve();
+          } catch (error) {
+            cleanup();
+            reject(normalizeError(error));
+          }
         };
 
-        options.vad.on("turnComplete", handleTurnComplete);
-        options.vad.on("error", handleError);
+        void waitForSyntheticBoundary();
       });
 
       options.vad.beginSyntheticUtterance?.();
@@ -476,21 +499,7 @@ export function createRunnerSessionBridge(
 
       pushTrailingSilenceToVad(options.vad);
       options.vad.flush();
-
-      const speechHandle = options.session.say(normalizedText, {
-        audio: createAudioFrameStream(audioFrames),
-        allowInterruptions: false,
-        addToChatCtx: false,
-      });
-
-      if (!speechHandle || typeof speechHandle.waitForPlayout !== "function") {
-        throw new Error("session.say(...) must return a speech handle with waitForPlayout().");
-      }
-
-      await Promise.all([
-        speechHandle.waitForPlayout(),
-        turnCompletePromise,
-      ]);
+      await playoutAndSilencePromise;
     },
   };
 }

@@ -248,6 +248,12 @@ export class Orchestrator {
           floorController as FloorController,
           roomId,
           hostAgentId,
+          {
+            logger: createLogger({
+              component: "silence-timer",
+              roomId,
+            }),
+          },
         ));
     this.createRunner =
       dependencies.createRunner
