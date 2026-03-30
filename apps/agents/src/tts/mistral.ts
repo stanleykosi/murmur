@@ -75,7 +75,7 @@ export class MistralTTSProvider implements TTSProvider {
           throw new TtsResponseError("Mistral", response.status, responseText);
         }
 
-        const responseBody: MistralResponseBody = await response.json();
+        const responseBody = (await response.json()) as MistralResponseBody;
 
         if (!responseBody.audio_data) {
           throw new TtsMissingBodyError("Mistral");
