@@ -1423,9 +1423,8 @@ function createPreparedTurnSignature(
     promptOverride,
     transcript: transcriptSnapshot.map((entry) => ({
       agentId: entry.agentId,
+      agentName: entry.agentName,
       content: entry.content,
-      id: entry.id,
-      timestamp: entry.timestamp,
       wasFiltered: entry.wasFiltered,
     })),
   });

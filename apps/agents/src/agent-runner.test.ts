@@ -506,6 +506,62 @@ describe("AgentRunner", () => {
   });
 
   /**
+   * Speculative preparation should survive the projected-to-persisted
+   * transcript transition that happens when a current speaker finishes. The
+   * actual published transcript event gets a new id and timestamp, so reuse
+   * must depend on stable conversational content rather than those volatile
+   * fields.
+   */
+  it("reuses a prepared turn after the projected transcript becomes a persisted event", async () => {
+    const module = await importAgentRunnerModule();
+    const fixture = createRunnerFixture(module, {
+      llmResponses: [
+        "That is exactly where the timeline gets shaky, because the bottleneck is iteration speed rather than headline capability.",
+      ],
+    });
+
+    await fixture.runner.start();
+
+    await fixture.runner.prepareTurn({
+      transcriptSnapshot: [
+        ...fixture.transcriptBuffer.getSnapshot(),
+        {
+          id: "projected-host-turn",
+          roomId: "room-1",
+          agentId: PARTICIPANT_AGENT.id,
+          agentName: PARTICIPANT_AGENT.name,
+          content: "Nova just framed the bottleneck as iteration speed, not raw capability.",
+          timestamp: "2026-03-28T12:00:30.000Z",
+          accentColor: PARTICIPANT_AGENT.accentColor,
+          wasFiltered: false,
+        },
+      ],
+    });
+
+    fixture.transcriptBuffer.addEntry({
+      id: "persisted-host-turn",
+      roomId: "room-1",
+      agentId: PARTICIPANT_AGENT.id,
+      agentName: PARTICIPANT_AGENT.name,
+      content: "Nova just framed the bottleneck as iteration speed, not raw capability.",
+      timestamp: "2026-03-28T12:00:47.000Z",
+      accentColor: PARTICIPANT_AGENT.accentColor,
+      wasFiltered: false,
+    });
+
+    await fixture.runner.requestTurn();
+
+    expect(fixture.baseLLMProvider.generateResponse).toHaveBeenCalledTimes(1);
+    expect(fixture.ttsProvider.synthesize).toHaveBeenCalledTimes(1);
+    expect(fixture.sessionBridge.speakText).toHaveBeenCalledWith(
+      "That is exactly where the timeline gets shaky, because the bottleneck is iteration speed rather than headline capability.",
+      expect.any(Buffer),
+    );
+
+    await fixture.runner.stop();
+  });
+
+  /**
    * Realtime broadcast failures should not invalidate a turn after the
    * transcript has already been persisted locally.
    */
