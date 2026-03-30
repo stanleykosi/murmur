@@ -10,6 +10,7 @@ import type { TtsProvider } from "@murmur/shared";
 
 import { CartesiaTTSProvider } from "./cartesia.js";
 import { ElevenLabsTTSProvider } from "./elevenlabs.js";
+import { MistralTTSProvider } from "./mistral.js";
 
 /**
  * Minimal interface every Murmur TTS backend must satisfy.
@@ -38,9 +39,11 @@ export function createTTSProvider(provider: TtsProvider): TTSProvider {
       return new CartesiaTTSProvider();
     case "elevenlabs":
       return new ElevenLabsTTSProvider();
+    case "mistral":
+      return new MistralTTSProvider();
     default:
       throw new Error(
-        `Unsupported TTS provider "${provider}". Expected one of: cartesia, elevenlabs.`,
+        `Unsupported TTS provider "${provider}". Expected one of: cartesia, elevenlabs, mistral.`,
       );
   }
 }

@@ -15,7 +15,7 @@ CREATE TABLE "agents" (
 	"is_active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "agents_name_unique" UNIQUE("name"),
-	CONSTRAINT "agents_tts_provider_check" CHECK ("tts_provider" in ('cartesia', 'elevenlabs')),
+	CONSTRAINT "agents_tts_provider_check" CHECK ("tts_provider" in ('cartesia', 'elevenlabs', 'mistral')),
 	CONSTRAINT "agents_accent_color_check" CHECK ("accent_color" ~ '^#[0-9A-Fa-f]{6}$')
 );
 --> statement-breakpoint

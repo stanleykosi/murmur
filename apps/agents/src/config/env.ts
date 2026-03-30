@@ -164,6 +164,7 @@ const AgentEnvSchema = z.object({
   ),
   CARTESIA_API_KEY: requiredString("CARTESIA_API_KEY"),
   ELEVENLABS_API_KEY: requiredString("ELEVENLABS_API_KEY"),
+  MISTRAL_API_KEY: requiredString("MISTRAL_API_KEY"),
   SENTRY_DSN: optionalUrl("SENTRY_DSN"),
 });
 

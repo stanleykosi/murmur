@@ -46,7 +46,7 @@ export type UserRole = (typeof USER_ROLES)[number];
 /**
  * Supported text-to-speech providers for Murmur agents.
  */
-export const TTS_PROVIDERS = ["cartesia", "elevenlabs"] as const;
+export const TTS_PROVIDERS = ["cartesia", "elevenlabs", "mistral"] as const;
 
 /**
  * Union of supported text-to-speech providers for Murmur agents.

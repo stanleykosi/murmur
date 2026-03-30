@@ -122,7 +122,7 @@
       "checkConstraints": {
         "agents_tts_provider_check": {
           "name": "agents_tts_provider_check",
-          "value": "\"tts_provider\" in ('cartesia', 'elevenlabs')"
+          "value": "\"tts_provider\" in ('cartesia', 'elevenlabs', 'mistral')"
         },
         "agents_accent_color_check": {
           "name": "agents_accent_color_check",
