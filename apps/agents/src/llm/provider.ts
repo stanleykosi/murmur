@@ -26,6 +26,7 @@ export interface LLMGenerationOptions {
   model?: string;
   maxTokens?: number;
   temperature?: number;
+  signal?: AbortSignal;
 }
 
 /**

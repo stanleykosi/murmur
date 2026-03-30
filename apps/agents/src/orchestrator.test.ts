@@ -788,6 +788,88 @@ describe("Orchestrator", () => {
   });
 
   /**
+   * Deadline misses should move the room forward without treating the runner as
+   * failed or restarting it.
+   */
+  it("schedules the next speaker when a runner misses the turn deadline", async () => {
+    const module = await importOrchestratorModule();
+    const currentRooms = [createRoom("room-a")];
+    const runners = new Map<string, FakeRunner[]>();
+    const floorControllers = new Map<string, ReturnType<typeof createFloorController>>();
+    const createRunner = vi.fn((options: {
+      room: { roomId: string };
+      agent: AgentRuntimeProfile;
+    }) => {
+      const runner = new FakeRunner(options.room.roomId, options.agent);
+      const key = `${options.room.roomId}:${options.agent.id}`;
+      const entries = runners.get(key) ?? [];
+
+      entries.push(runner);
+      runners.set(key, entries);
+      return runner;
+    });
+    const orchestrator = new module.Orchestrator({
+      captureRuntimeError: (logger, error) => (logger.error(error), error as Error),
+      closeDatabasePool: async () => undefined,
+      closeRedis: async () => undefined,
+      connectRedis: async () => undefined,
+      createFloorController: (roomId) => {
+        const controller = createFloorController();
+
+        floorControllers.set(roomId, controller);
+        return controller;
+      },
+      createRunner,
+      createSilenceTimer: () => new FakeSilenceTimer(),
+      logger: createLogger(),
+      pingRedis: async () => undefined,
+      pollIntervalMs: 60_000,
+      roomRepository: {
+        listActiveRooms: vi.fn(async () => currentRooms),
+      },
+      testDatabaseConnection: async () => ({
+        databaseName: "postgres",
+        serverTime: "2026-03-28 12:00:00+00",
+      }),
+      transcriptRepository: {
+        insertTranscriptEvent: vi.fn(async () => undefined),
+        listRecentByRoomId: vi.fn(async () => []),
+      },
+      healthPort: 0,
+    });
+
+    await orchestrator.start();
+    await flushMicrotasks();
+
+    const hostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
+    const participantRunner = runners.get(`room-a:${PARTICIPANT_AGENT.id}`)?.[0];
+    const floorController = floorControllers.get("room-a");
+
+    hostRunner?.requestTurn.mockClear();
+    participantRunner?.requestTurn.mockClear();
+    hostRunner?.setExecutingTurn(false);
+    floorController?.setHolder(null);
+    await floorController?.setAgentLastSpoke(
+      HOST_AGENT.id,
+      Date.now(),
+    );
+
+    hostRunner?.emit("turnDeadlineMissed", {
+      roomId: "room-a",
+      agentId: HOST_AGENT.id,
+      deadlineMs: 45_000,
+    });
+    await vi.waitFor(() => {
+      expect(participantRunner?.requestTurn).toHaveBeenCalledTimes(1);
+    });
+
+    expect(createRunner).toHaveBeenCalledTimes(2);
+    expect(hostRunner?.requestTurn).not.toHaveBeenCalled();
+
+    await orchestrator.stop();
+  });
+
+  /**
    * Dead-air notifications from the silence timer should be routed to the host
    * runner with a one-turn prompt override.
    */

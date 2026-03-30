@@ -27,6 +27,11 @@ export const DEFAULT_OPENROUTER_MAX_TOKENS = 300;
 export const DEFAULT_OPENROUTER_REQUEST_TIMEOUT_MS = 60_000;
 
 /**
+ * Canonical per-turn execution budget before the room should move on.
+ */
+export const DEFAULT_AGENT_TURN_DEADLINE_MS = 45_000;
+
+/**
  * Builds a trimmed, required non-empty string validator for secret-like values.
  *
  * @param label - Human-readable variable name used in validation messages.
@@ -152,6 +157,10 @@ const AgentEnvSchema = z.object({
   OPENROUTER_REQUEST_TIMEOUT_MS: optionalPositiveInteger(
     "OPENROUTER_REQUEST_TIMEOUT_MS",
     DEFAULT_OPENROUTER_REQUEST_TIMEOUT_MS,
+  ),
+  AGENT_TURN_DEADLINE_MS: optionalPositiveInteger(
+    "AGENT_TURN_DEADLINE_MS",
+    DEFAULT_AGENT_TURN_DEADLINE_MS,
   ),
   CARTESIA_API_KEY: requiredString("CARTESIA_API_KEY"),
   ELEVENLABS_API_KEY: requiredString("ELEVENLABS_API_KEY"),

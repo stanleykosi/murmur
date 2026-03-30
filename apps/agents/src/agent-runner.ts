@@ -55,6 +55,29 @@ const VAD_CHANNELS = 1;
 const VAD_SILENCE_FRAME_DURATION_MS = 100;
 const SYNTHETIC_TURN_BOUNDARY_TIMEOUT_MS = 10_000;
 const SYNTHETIC_TURN_BOUNDARY_TIMEOUT_BUFFER_MS = 5_000;
+const TRANSCRIPT_PERSIST_TIMEOUT_MS = 3_000;
+const TURN_DEADLINE_EXCEEDED_ERROR_NAME = "TurnDeadlineExceededError";
+
+/**
+ * Structured payload emitted when one turn misses the room execution budget.
+ */
+export interface AgentRunnerTurnDeadlineMissedPayload {
+  roomId: string;
+  agentId: string;
+  deadlineMs: number;
+}
+
+/**
+ * Canonical error used when a room turn exceeds its execution budget.
+ */
+export class TurnDeadlineExceededError extends Error {
+  public constructor(deadlineMs: number) {
+    super(
+      `Agent turn exceeded the execution deadline of ${deadlineMs}ms and was aborted.`,
+    );
+    this.name = TURN_DEADLINE_EXCEEDED_ERROR_NAME;
+  }
+}
 
 /**
  * Minimal logger surface required by the runner.
@@ -258,6 +281,7 @@ export interface AgentRunnerTurnRequest {
 export type AgentRunnerEventName =
   | "ready"
   | "turnCompleted"
+  | "turnDeadlineMissed"
   | "error"
   | "stopped";
 
@@ -598,6 +622,10 @@ export class AgentRunner extends EventEmitter {
 
   private turnExecuting = false;
 
+  private turnAbortController: AbortController | null = null;
+
+  private turnDeadlineTimer: NodeJS.Timeout | null = null;
+
   private stopping = false;
 
   private turnExecutionPromise: Promise<void> = Promise.resolve();
@@ -667,6 +695,10 @@ export class AgentRunner extends EventEmitter {
     eventName: "turnCompleted",
     listener: (payload: AgentRunnerTurnCompletedPayload) => void,
   ): this;
+  public override on(
+    eventName: "turnDeadlineMissed",
+    listener: (payload: AgentRunnerTurnDeadlineMissedPayload) => void,
+  ): this;
   public override on(eventName: "error", listener: (error: Error) => void): this;
   public override on(
     eventName: "stopped",
@@ -686,6 +718,10 @@ export class AgentRunner extends EventEmitter {
   public override emit(
     eventName: "turnCompleted",
     payload: AgentRunnerTurnCompletedPayload,
+  ): boolean;
+  public override emit(
+    eventName: "turnDeadlineMissed",
+    payload: AgentRunnerTurnDeadlineMissedPayload,
   ): boolean;
   public override emit(eventName: "error", error: Error): boolean;
   public override emit(
@@ -852,6 +888,12 @@ export class AgentRunner extends EventEmitter {
 
         this.pendingPromptOverride = promptOverride;
         this.turnExecuting = true;
+        this.turnAbortController = new AbortController();
+        this.turnDeadlineTimer = setTimeout(() => {
+          this.turnAbortController?.abort(
+            new TurnDeadlineExceededError(env.AGENT_TURN_DEADLINE_MS),
+          );
+        }, env.AGENT_TURN_DEADLINE_MS);
 
         try {
           this.graphState = await this.graph!.invoke(this.graphState);
@@ -865,6 +907,11 @@ export class AgentRunner extends EventEmitter {
             });
           }
         } catch (error) {
+          if (this.isTurnDeadlineExceeded()) {
+            await this.handleTurnDeadlineMiss();
+            return;
+          }
+
           this.ready = false;
           await this.ensureFloorReleased();
           const normalizedError = this.captureRuntimeErrorImpl(
@@ -883,6 +930,12 @@ export class AgentRunner extends EventEmitter {
 
           throw normalizedError;
         } finally {
+          if (this.turnDeadlineTimer) {
+            clearTimeout(this.turnDeadlineTimer);
+            this.turnDeadlineTimer = null;
+          }
+
+          this.turnAbortController = null;
           this.turnExecuting = false;
           this.pendingPromptOverride = null;
         }
@@ -901,6 +954,7 @@ export class AgentRunner extends EventEmitter {
 
     this.stopping = true;
     this.ready = false;
+    this.turnAbortController?.abort(new Error("AgentRunner stop requested."));
 
     await this.ensureFloorReleased().catch(() => undefined);
 
@@ -922,6 +976,12 @@ export class AgentRunner extends EventEmitter {
     this.roomConnection = null;
     this.ttsProvider = null;
     this.turnExecuting = false;
+    this.turnAbortController = null;
+
+    if (this.turnDeadlineTimer) {
+      clearTimeout(this.turnDeadlineTimer);
+      this.turnDeadlineTimer = null;
+    }
 
     this.emit("stopped", {
       roomId: this.room.roomId,
@@ -956,7 +1016,12 @@ export class AgentRunner extends EventEmitter {
           return await this.baseLLMProvider.generateResponse(
             systemPrompt,
             transcript,
-            options,
+            this.turnAbortController
+              ? {
+                  ...options,
+                  signal: this.turnAbortController.signal,
+                }
+              : options,
           );
         } finally {
           this.pendingPromptOverride = null;
@@ -993,8 +1058,6 @@ export class AgentRunner extends EventEmitter {
       getTranscriptSnapshot: async (): Promise<TranscriptEntry[]> =>
         this.transcriptBuffer.getSnapshot(),
       publishTranscript: async (event: TranscriptEvent): Promise<void> => {
-        await this.options.transcriptRepository.insertTranscriptEvent(event);
-
         this.transcriptBuffer.addEntry({
           id: event.id,
           roomId: event.roomId,
@@ -1005,6 +1068,31 @@ export class AgentRunner extends EventEmitter {
           accentColor: event.accentColor,
           wasFiltered: event.wasFiltered,
         });
+
+        try {
+          await Promise.race([
+            this.options.transcriptRepository.insertTranscriptEvent(event),
+            new Promise<never>((_resolve, reject) => {
+              setTimeout(() => {
+                reject(
+                  new Error(
+                    `Timed out persisting transcript event after ${TRANSCRIPT_PERSIST_TIMEOUT_MS}ms.`,
+                  ),
+                );
+              }, TRANSCRIPT_PERSIST_TIMEOUT_MS);
+            }),
+          ]);
+        } catch (error) {
+          this.logger.warn(
+            {
+              agentId: event.agentId,
+              eventId: event.id,
+              roomId: event.roomId,
+              err: error,
+            },
+            "Transcript event was buffered locally but could not be persisted to PostgreSQL.",
+          );
+        }
 
         try {
           await this.transcriptPublisher.publishTranscript(event);
@@ -1043,6 +1131,44 @@ export class AgentRunner extends EventEmitter {
 
     if (currentHolder === this.agent.id) {
       await this.floorController.releaseFloor(this.agent.id);
+    }
+  }
+
+  /**
+   * Returns whether the active turn was aborted by the room deadline.
+   */
+  private isTurnDeadlineExceeded(): boolean {
+    return this.turnAbortController?.signal.reason instanceof TurnDeadlineExceededError;
+  }
+
+  /**
+   * Releases the floor and emits a recoverable timeout event for scheduling.
+   */
+  private async handleTurnDeadlineMiss(): Promise<void> {
+    await this.ensureFloorReleased();
+
+    // Treat a deadline miss as a cooldown so the scheduler rotates instead of
+    // immediately reselecting the same speaker on the next pass.
+    await this.floorController.setAgentLastSpoke(
+      this.agent.id,
+      this.now().getTime(),
+    );
+
+    this.logger.warn(
+      {
+        roomId: this.room.roomId,
+        agentId: this.agent.id,
+        deadlineMs: env.AGENT_TURN_DEADLINE_MS,
+      },
+      "Agent turn exceeded the execution deadline and was skipped.",
+    );
+
+    if (!this.stopping) {
+      this.emit("turnDeadlineMissed", {
+        roomId: this.room.roomId,
+        agentId: this.agent.id,
+        deadlineMs: env.AGENT_TURN_DEADLINE_MS,
+      });
     }
   }
 }

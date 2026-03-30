@@ -97,6 +97,27 @@ export const OPENROUTER_DEFAULT_TEMPERATURE = 0.8;
 export const OPENROUTER_REQUEST_TIMEOUT_MS = env.OPENROUTER_REQUEST_TIMEOUT_MS;
 const OPENROUTER_EMPTY_RESPONSE_RETRY_COUNT = 1;
 
+/**
+ * Combines the provider timeout with an optional caller-owned abort signal so
+ * room-level turn deadlines can preempt a slow upstream completion.
+ *
+ * @param timeoutMs - Provider-level request timeout in milliseconds.
+ * @param externalSignal - Optional caller-owned abort signal for turn budgets.
+ * @returns The canonical abort signal for one OpenRouter request.
+ */
+function resolveRequestAbortSignal(
+  timeoutMs: number,
+  externalSignal?: AbortSignal,
+): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+
+  if (!externalSignal) {
+    return timeoutSignal;
+  }
+
+  return AbortSignal.any([timeoutSignal, externalSignal]);
+}
+
 const openRouterLogger = pino({
   level: process.env.LOG_LEVEL?.trim() || "info",
   base: {
@@ -289,7 +310,10 @@ export class OpenRouterLLMProvider implements LLMProvider {
         attempt += 1
       ) {
         const completion = await this.client.chat.completions.create(request, {
-          signal: AbortSignal.timeout(OPENROUTER_REQUEST_TIMEOUT_MS),
+          signal: resolveRequestAbortSignal(
+            OPENROUTER_REQUEST_TIMEOUT_MS,
+            options?.signal,
+          ),
         });
 
         try {

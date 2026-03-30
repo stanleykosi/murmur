@@ -71,12 +71,20 @@ export interface AgentRunnerLike {
     eventName: "turnCompleted",
     listener: (payload: { roomId: string; agentId: string; turnCount: number; lastSpokeAt: number }) => void,
   ): this;
+  on(
+    eventName: "turnDeadlineMissed",
+    listener: (payload: { roomId: string; agentId: string; deadlineMs: number }) => void,
+  ): this;
   on(eventName: "error", listener: (error: Error) => void): this;
   on(eventName: "stopped", listener: (payload: { roomId: string; agentId: string }) => void): this;
   off(eventName: "ready", listener: (payload: { roomId: string; agentId: string }) => void): this;
   off(
     eventName: "turnCompleted",
     listener: (payload: { roomId: string; agentId: string; turnCount: number; lastSpokeAt: number }) => void,
+  ): this;
+  off(
+    eventName: "turnDeadlineMissed",
+    listener: (payload: { roomId: string; agentId: string; deadlineMs: number }) => void,
   ): this;
   off(eventName: "error", listener: (error: Error) => void): this;
   off(eventName: "stopped", listener: (payload: { roomId: string; agentId: string }) => void): this;
@@ -143,6 +151,7 @@ export interface OrchestratorDependencies {
 interface RunnerEventHandlers {
   handleReady: (payload: { roomId: string; agentId: string }) => void;
   handleTurnCompleted: (payload: { roomId: string; agentId: string; turnCount: number; lastSpokeAt: number }) => void;
+  handleTurnDeadlineMissed: (payload: { roomId: string; agentId: string; deadlineMs: number }) => void;
   handleError: (error: Error) => void;
   handleStopped: (payload: { roomId: string; agentId: string }) => void;
 }
@@ -522,6 +531,7 @@ export class Orchestrator {
 
         runner.on("ready", handlers.handleReady);
         runner.on("turnCompleted", handlers.handleTurnCompleted);
+        runner.on("turnDeadlineMissed", handlers.handleTurnDeadlineMissed);
         runner.on("error", handlers.handleError);
         runner.on("stopped", handlers.handleStopped);
         roomRuntime.runners.set(agent.id, runner);
@@ -667,6 +677,7 @@ export class Orchestrator {
   ): void {
     runner.off("ready", handlers.handleReady);
     runner.off("turnCompleted", handlers.handleTurnCompleted);
+    runner.off("turnDeadlineMissed", handlers.handleTurnDeadlineMissed);
     runner.off("error", handlers.handleError);
     runner.off("stopped", handlers.handleStopped);
   }
@@ -689,6 +700,25 @@ export class Orchestrator {
           this.scheduleNextSpeaker(roomId, "turn_completed"),
           {
             stage: "turn_completed_schedule",
+            roomId,
+            agentId,
+          },
+        );
+      },
+      handleTurnDeadlineMissed: ({ deadlineMs }) => {
+        this.roomRuntimes.get(roomId)?.restartAttempts.set(agentId, 0);
+        this.logger.warn(
+          {
+            roomId,
+            agentId,
+            deadlineMs,
+          },
+          "Runner turn missed the execution deadline; scheduling the next speaker.",
+        );
+        this.runDetachedTask(
+          this.scheduleNextSpeaker(roomId, "turn_deadline_missed"),
+          {
+            stage: "turn_deadline_missed_schedule",
             roomId,
             agentId,
           },
@@ -955,6 +985,7 @@ export class Orchestrator {
 
       runner.on("ready", handlers.handleReady);
       runner.on("turnCompleted", handlers.handleTurnCompleted);
+      runner.on("turnDeadlineMissed", handlers.handleTurnDeadlineMissed);
       runner.on("error", handlers.handleError);
       runner.on("stopped", handlers.handleStopped);
       runtime.runners.set(agentId, runner);

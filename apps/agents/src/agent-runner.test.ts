@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 
 import type { AgentRuntimeProfile } from "./runtime/agent-profile.js";
+import type { LLMGenerationOptions } from "./llm/provider.js";
 import { TranscriptBuffer } from "./runtime/transcript-buffer.js";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -186,6 +187,11 @@ function createRunnerFixture(
   module: AgentRunnerModule,
   overrides: {
     createVadDetectorImplementation?: () => Promise<FakeVADDetector>;
+    generateResponseImplementation?: (
+      systemPrompt: string,
+      transcript: string,
+      options?: LLMGenerationOptions,
+    ) => Promise<string>;
     llmResponses?: string[];
     publishTranscriptImplementation?: (event: TranscriptEvent) => Promise<void>;
     speakTextImplementation?: (text: string, pcmAudio: Buffer) => Promise<void>;
@@ -232,7 +238,10 @@ function createRunnerFixture(
     "The hard part is not raw capability, it's whether the feedback loops compound fast enough.",
   ])];
   const baseLLMProvider = {
-    generateResponse: vi.fn(async () => llmResponses.shift() ?? "Fallback response."),
+    generateResponse: vi.fn(
+      overrides.generateResponseImplementation
+      ?? (async () => llmResponses.shift() ?? "Fallback response."),
+    ),
   };
   const ttsProvider = {
     synthesize: vi.fn(async () => Buffer.from([0, 0, 1, 0])),
@@ -423,7 +432,9 @@ describe("AgentRunner", () => {
     expect(fixture.baseLLMProvider.generateResponse).toHaveBeenCalledWith(
       expect.stringContaining("Identity"),
       expect.stringContaining("[Rex]: Five years still feels too aggressive"),
-      undefined,
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }),
     );
     expect(fixture.ttsProvider.synthesize).toHaveBeenCalledWith(
       "The hard part is not raw capability, it's whether the feedback loops compound fast enough.",
@@ -529,6 +540,51 @@ describe("AgentRunner", () => {
     expect(secondPrompt).not.toContain(
       "The conversation has gone quiet. Re-open the disagreement with a sharper challenge.",
     );
+
+    await fixture.runner.stop();
+  });
+
+  /**
+   * Turn-budget misses should abort the active generation, release the floor,
+   * cool down the agent for scheduling, and keep the runner reusable.
+   */
+  it("treats a turn deadline miss as a recoverable scheduling event", async () => {
+    const module = await importAgentRunnerModule(createValidEnvironment({
+      AGENT_TURN_DEADLINE_MS: "5",
+    }));
+    const fixture = createRunnerFixture(module, {
+      generateResponseImplementation: async (
+        _systemPrompt,
+        _transcript,
+        options,
+      ) => await new Promise<string>((_resolve, reject) => {
+        options?.signal?.addEventListener("abort", () => {
+          reject(options.signal?.reason);
+        }, { once: true });
+      }),
+    });
+    const errorListener = vi.fn();
+    const turnDeadlineMissedListener = vi.fn();
+
+    fixture.runner.on("error", errorListener);
+    fixture.runner.on("turnDeadlineMissed", turnDeadlineMissedListener);
+    await fixture.runner.start();
+
+    await expect(fixture.runner.requestTurn()).resolves.toBeUndefined();
+
+    expect(turnDeadlineMissedListener).toHaveBeenCalledWith({
+      roomId: "room-1",
+      agentId: HOST_AGENT.id,
+      deadlineMs: 5,
+    });
+    expect(errorListener).not.toHaveBeenCalled();
+    expect(fixture.runner.isReady()).toBe(true);
+    expect(fixture.floorController.releaseFloor).toHaveBeenCalledWith(HOST_AGENT.id);
+    expect(fixture.floorController.setAgentLastSpoke).toHaveBeenCalledWith(
+      HOST_AGENT.id,
+      Date.parse("2026-03-28T12:00:30.000Z"),
+    );
+    expect(fixture.ttsProvider.synthesize).not.toHaveBeenCalled();
 
     await fixture.runner.stop();
   });
@@ -819,6 +875,31 @@ describe("AgentRunner", () => {
     expect(fixture.runner.isReady()).toBe(true);
     expect(fixture.floorController.releaseFloor).toHaveBeenCalledWith(HOST_AGENT.id);
     await expect(fixture.runner.requestTurn()).resolves.toBeUndefined();
+    expect(fixture.logger.warn).toHaveBeenCalled();
+
+    await fixture.runner.stop();
+  });
+
+  /**
+   * Transcript persistence failures should not block turn completion or force a
+   * runner restart after the live room already heard the spoken turn.
+   */
+  it("keeps the runner ready when transcript persistence fails", async () => {
+    const module = await importAgentRunnerModule();
+    const fixture = createRunnerFixture(module);
+    const errorListener = vi.fn();
+
+    fixture.transcriptRepository.insertTranscriptEvent.mockRejectedValue(
+      new Error("PostgreSQL timed out."),
+    );
+
+    fixture.runner.on("error", errorListener);
+    await fixture.runner.start();
+
+    await expect(fixture.runner.requestTurn()).resolves.toBeUndefined();
+    expect(errorListener).not.toHaveBeenCalled();
+    expect(fixture.runner.isReady()).toBe(true);
+    expect(fixture.floorController.releaseFloor).toHaveBeenCalledWith(HOST_AGENT.id);
     expect(fixture.logger.warn).toHaveBeenCalled();
 
     await fixture.runner.stop();

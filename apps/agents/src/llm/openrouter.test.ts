@@ -233,6 +233,43 @@ describe("OpenRouterLLMProvider", () => {
   });
 
   /**
+   * A room-level turn deadline should be able to abort the upstream request
+   * before the provider-level timeout fires.
+   */
+  it("honors an external abort signal from the caller", async () => {
+    const module = await importOpenRouterModule();
+    const externalAbortController = new AbortController();
+    const createCompletion = vi
+      .fn<OpenRouterClient["chat"]["completions"]["create"]>()
+      .mockImplementation((_request, requestOptions) => new Promise<never>((_resolve, reject) => {
+        requestOptions?.signal?.addEventListener("abort", () => {
+          reject(requestOptions.signal?.reason);
+        }, { once: true });
+        externalAbortController.abort(new Error("Turn deadline exceeded."));
+      }));
+    const client: OpenRouterClient = {
+      chat: {
+        completions: {
+          create: createCompletion,
+        },
+      },
+    };
+    const provider = new module.OpenRouterLLMProvider(client);
+
+    await expect(
+      provider.generateResponse(
+        "You are Sage.",
+        "[Nova]: We need a clearer benchmark.",
+        {
+          signal: externalAbortController.signal,
+        },
+      ),
+    ).rejects.toThrowError(
+      /Failed to generate a response from OpenRouter using model "openai\/gpt-4o"/,
+    );
+  });
+
+  /**
    * Ensures the provider surfaces policy refusals as assistant output instead
    * of treating them as an empty completion.
    */
