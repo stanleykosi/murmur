@@ -9,8 +9,8 @@
 
 import {
   ConnectionState as LiveKitConnectionState,
-  ParticipantEvent,
   RoomEvent,
+  type Participant,
   type RemoteParticipant,
   type Room,
 } from "livekit-client";
@@ -213,8 +213,10 @@ function mapLiveKitState(state: LiveKitConnectionState): ConnectionState {
  * @param room - LiveKit room whose remote participants should be scanned.
  * @returns The active Murmur agent ID, or `null` when nobody is speaking.
  */
-function getActiveSpeakerId(room: Room): string | null {
-  for (const participant of room.remoteParticipants.values()) {
+function getActiveSpeakerIdFromParticipants(
+  participants: Iterable<Participant>,
+): string | null {
+  for (const participant of participants) {
     if (!participant.isSpeaking) {
       continue;
     }
@@ -227,6 +229,26 @@ function getActiveSpeakerId(room: Room): string | null {
   }
 
   return null;
+}
+
+/**
+ * Returns the currently speaking Murmur agent in the supplied room.
+ *
+ * LiveKit already maintains a room-level active-speaker list, so the listener
+ * UI should follow that canonical signal instead of rebuilding speaker state
+ * solely from participant-local events.
+ *
+ * @param room - LiveKit room whose current active speakers should be scanned.
+ * @returns The active Murmur agent ID, or `null` when nobody is speaking.
+ */
+function getActiveSpeakerId(room: Room): string | null {
+  const activeSpeakerId = getActiveSpeakerIdFromParticipants(room.activeSpeakers);
+
+  if (activeSpeakerId !== null) {
+    return activeSpeakerId;
+  }
+
+  return getActiveSpeakerIdFromParticipants(room.remoteParticipants.values());
 }
 
 /**
@@ -248,8 +270,6 @@ function attachRoomObservers(
   setActiveSpeakerId: Dispatch<SetStateAction<string | null>>,
   setRoomState: Dispatch<SetStateAction<Room | null>>,
 ) {
-  const participantSpeakingListeners = new Map<string, () => void>();
-
   /**
    * Returns whether the observed room still belongs to the current connection
    * generation. Stale rooms are ignored after retries, reconnects, or cleanup.
@@ -270,46 +290,11 @@ function attachRoomObservers(
   }
 
   /**
-   * Attaches a speaking-state listener to a remote participant.
-   *
-   * @param participant - Remote participant whose speaking state should be tracked.
-   */
-  function attachParticipantListener(participant: RemoteParticipant) {
-    if (participantSpeakingListeners.has(participant.identity)) {
-      return;
-    }
-
-    const handleSpeakingChanged = () => {
-      updateActiveSpeaker();
-    };
-
-    participant.on(ParticipantEvent.IsSpeakingChanged, handleSpeakingChanged);
-    participantSpeakingListeners.set(participant.identity, handleSpeakingChanged);
-  }
-
-  /**
-   * Removes the speaking-state listener for a remote participant.
-   *
-   * @param participant - Remote participant being detached from the room.
-   */
-  function detachParticipantListener(participant: RemoteParticipant) {
-    const listener = participantSpeakingListeners.get(participant.identity);
-
-    if (!listener) {
-      return;
-    }
-
-    participant.off(ParticipantEvent.IsSpeakingChanged, listener);
-    participantSpeakingListeners.delete(participant.identity);
-  }
-
-  /**
    * Handles newly connected remote participants by tracking their speaking state.
    *
    * @param participant - Remote participant that joined the room.
    */
-  function handleParticipantConnected(participant: RemoteParticipant) {
-    attachParticipantListener(participant);
+  function handleParticipantConnected(_participant: RemoteParticipant) {
     updateActiveSpeaker();
   }
 
@@ -319,7 +304,7 @@ function attachRoomObservers(
    * @param participant - Remote participant that left the room.
    */
   function handleParticipantDisconnected(participant: RemoteParticipant) {
-    detachParticipantListener(participant);
+    void participant;
     updateActiveSpeaker();
   }
 
@@ -360,30 +345,31 @@ function attachRoomObservers(
     setRoomState(null);
   }
 
+  /**
+   * Mirrors LiveKit's room-level active-speaker list to the stage UI.
+   */
+  function handleActiveSpeakersChanged() {
+    updateActiveSpeaker();
+  }
+
   room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
   room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
+  room.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakersChanged);
   room.on(RoomEvent.Reconnecting, handleRoomReconnecting);
   room.on(RoomEvent.SignalReconnecting, handleRoomReconnecting);
   room.on(RoomEvent.Reconnected, handleRoomReconnected);
   room.on(RoomEvent.Disconnected, handleRoomDisconnected);
-
-  for (const participant of room.remoteParticipants.values()) {
-    attachParticipantListener(participant);
-  }
 
   updateActiveSpeaker();
 
   return () => {
     room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
     room.off(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
+    room.off(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakersChanged);
     room.off(RoomEvent.Reconnecting, handleRoomReconnecting);
     room.off(RoomEvent.SignalReconnecting, handleRoomReconnecting);
     room.off(RoomEvent.Reconnected, handleRoomReconnected);
     room.off(RoomEvent.Disconnected, handleRoomDisconnected);
-
-    for (const participant of room.remoteParticipants.values()) {
-      detachParticipantListener(participant);
-    }
   };
 }
 

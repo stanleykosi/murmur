@@ -165,18 +165,35 @@ const PARTICIPANT_AGENT: AgentRuntimeProfile = {
 };
 
 /**
+ * Secondary participant fixture used to verify directed handoff behavior.
+ */
+const SAGE_AGENT: AgentRuntimeProfile = {
+  id: "agent-sage",
+  name: "Sage",
+  personality: "Reflective, synthesizing, and good at surfacing deeper stakes.",
+  voiceId: "voice-sage",
+  ttsProvider: "cartesia",
+  accentColor: "#8AC926",
+  avatarUrl: "/agents/sage.png",
+  role: "participant",
+};
+
+/**
  * Creates one active room fixture with the supplied identifier.
  *
  * @param roomId - Room identifier for the fixture.
  * @returns A complete active-room definition.
  */
-function createRoom(roomId: string) {
+function createRoom(
+  roomId: string,
+  agents: AgentRuntimeProfile[] = [HOST_AGENT, PARTICIPANT_AGENT],
+) {
   return {
     id: roomId,
     title: `Room ${roomId}`,
     topic: `Topic for ${roomId}`,
     format: "moderated" as const,
-    agents: [HOST_AGENT, PARTICIPANT_AGENT],
+    agents,
     hostAgentId: HOST_AGENT.id,
     fingerprint: `fingerprint:${roomId}:v1`,
   };
@@ -189,6 +206,8 @@ class FakeRunner extends EventEmitter {
   private executingTurn = false;
 
   private ready = false;
+
+  public readonly prepareTurn = vi.fn(async () => undefined);
 
   public readonly requestTurn = vi.fn(async () => {
     this.executingTurn = true;
@@ -938,6 +957,242 @@ describe("Orchestrator", () => {
     expect(hostRunner?.requestTurn).toHaveBeenCalledWith({
       promptOverride: "The room is quiet. Restart the argument with a sharper question.",
     });
+
+    await orchestrator.stop();
+  });
+
+  /**
+   * Once a turn is ready to enter playback, the orchestrator should warm the
+   * likely next speaker against the projected transcript so handoff can start
+   * without another full cold LLM+TTS pass.
+   */
+  it("prepares the likely next speaker while the current speaker is entering playback", async () => {
+    const module = await importOrchestratorModule();
+    const currentRooms = [createRoom("room-a")];
+    const runners = new Map<string, FakeRunner[]>();
+    const createRunner = vi.fn((options: {
+      room: { roomId: string };
+      agent: AgentRuntimeProfile;
+    }) => {
+      const runner = new FakeRunner(options.room.roomId, options.agent);
+      const key = `${options.room.roomId}:${options.agent.id}`;
+      const entries = runners.get(key) ?? [];
+
+      entries.push(runner);
+      runners.set(key, entries);
+      return runner;
+    });
+    const orchestrator = new module.Orchestrator({
+      captureRuntimeError: (logger, error) => (logger.error(error), error as Error),
+      closeDatabasePool: async () => undefined,
+      closeRedis: async () => undefined,
+      connectRedis: async () => undefined,
+      createFloorController: () => createFloorController(),
+      createRunner,
+      createSilenceTimer: () => new FakeSilenceTimer(),
+      logger: createLogger(),
+      pingRedis: async () => undefined,
+      pollIntervalMs: 60_000,
+      roomRepository: {
+        listActiveRooms: vi.fn(async () => currentRooms),
+      },
+      testDatabaseConnection: async () => ({
+        databaseName: "postgres",
+        serverTime: "2026-03-28 12:00:00+00",
+      }),
+      transcriptRepository: {
+        insertTranscriptEvent: vi.fn(async () => undefined),
+        listRecentByRoomId: vi.fn(async () => []),
+      },
+      healthPort: 0,
+    });
+
+    await orchestrator.start();
+    await flushMicrotasks();
+
+    const hostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
+    const participantRunner = runners.get(`room-a:${PARTICIPANT_AGENT.id}`)?.[0];
+
+    participantRunner?.prepareTurn.mockClear();
+    hostRunner?.emit("turnReadyForPlayback", {
+      roomId: "room-a",
+      agentId: HOST_AGENT.id,
+      content: "The bottleneck might be iteration speed, not raw capability.",
+      timestamp: new Date().toISOString(),
+      wasFiltered: false,
+    });
+
+    await vi.waitFor(() => {
+      expect(participantRunner?.prepareTurn).toHaveBeenCalledTimes(1);
+    });
+    expect(participantRunner?.prepareTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transcriptSnapshot: expect.arrayContaining([
+          expect.objectContaining({
+            agentId: HOST_AGENT.id,
+            content: "The bottleneck might be iteration speed, not raw capability.",
+          }),
+        ]),
+      }),
+    );
+
+    await orchestrator.stop();
+  });
+
+  /**
+   * When the host explicitly calls on a named participant, speculative
+   * preparation should target that participant instead of falling back to the
+   * generic fairness scorer.
+   */
+  it("prepares the explicitly called-on participant from a host-directed handoff", async () => {
+    const module = await importOrchestratorModule();
+    const currentRooms = [createRoom("room-a", [HOST_AGENT, PARTICIPANT_AGENT, SAGE_AGENT])];
+    const runners = new Map<string, FakeRunner[]>();
+    const createRunner = vi.fn((options: {
+      room: { roomId: string };
+      agent: AgentRuntimeProfile;
+    }) => {
+      const runner = new FakeRunner(options.room.roomId, options.agent);
+      const key = `${options.room.roomId}:${options.agent.id}`;
+      const entries = runners.get(key) ?? [];
+
+      entries.push(runner);
+      runners.set(key, entries);
+      return runner;
+    });
+    const orchestrator = new module.Orchestrator({
+      captureRuntimeError: (logger, error) => (logger.error(error), error as Error),
+      closeDatabasePool: async () => undefined,
+      closeRedis: async () => undefined,
+      connectRedis: async () => undefined,
+      createFloorController: () => createFloorController(),
+      createRunner,
+      createSilenceTimer: () => new FakeSilenceTimer(),
+      logger: createLogger(),
+      pingRedis: async () => undefined,
+      pollIntervalMs: 60_000,
+      roomRepository: {
+        listActiveRooms: vi.fn(async () => currentRooms),
+      },
+      testDatabaseConnection: async () => ({
+        databaseName: "postgres",
+        serverTime: "2026-03-28 12:00:00+00",
+      }),
+      transcriptRepository: {
+        insertTranscriptEvent: vi.fn(async () => undefined),
+        listRecentByRoomId: vi.fn(async () => []),
+      },
+      healthPort: 0,
+    });
+
+    await orchestrator.start();
+    await flushMicrotasks();
+
+    const hostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
+    const rexRunner = runners.get(`room-a:${PARTICIPANT_AGENT.id}`)?.[0];
+    const sageRunner = runners.get(`room-a:${SAGE_AGENT.id}`)?.[0];
+
+    rexRunner?.prepareTurn.mockClear();
+    sageRunner?.prepareTurn.mockClear();
+    hostRunner?.emit("turnReadyForPlayback", {
+      roomId: "room-a",
+      agentId: HOST_AGENT.id,
+      content: "Rex, push back on that timeline before we move on.",
+      timestamp: new Date().toISOString(),
+      wasFiltered: false,
+    });
+
+    await vi.waitFor(() => {
+      expect(rexRunner?.prepareTurn).toHaveBeenCalledTimes(1);
+    });
+    expect(sageRunner?.prepareTurn).not.toHaveBeenCalled();
+
+    await orchestrator.stop();
+  });
+
+  /**
+   * A host-directed handoff should also control the real next-speaker
+   * selection, even when the generic fairness scorer would prefer someone else.
+   */
+  it("schedules the explicitly called-on participant before the fairness scorer", async () => {
+    const module = await importOrchestratorModule();
+    const currentRooms = [createRoom("room-a", [HOST_AGENT, PARTICIPANT_AGENT, SAGE_AGENT])];
+    const runners = new Map<string, FakeRunner[]>();
+    const floorControllers = new Map<string, ReturnType<typeof createFloorController>>();
+    const createRunner = vi.fn((options: {
+      room: { roomId: string };
+      agent: AgentRuntimeProfile;
+    }) => {
+      const runner = new FakeRunner(options.room.roomId, options.agent);
+      const key = `${options.room.roomId}:${options.agent.id}`;
+      const entries = runners.get(key) ?? [];
+
+      entries.push(runner);
+      runners.set(key, entries);
+      return runner;
+    });
+    const orchestrator = new module.Orchestrator({
+      captureRuntimeError: (logger, error) => (logger.error(error), error as Error),
+      closeDatabasePool: async () => undefined,
+      closeRedis: async () => undefined,
+      connectRedis: async () => undefined,
+      createFloorController: (roomId: string) => {
+        const controller = createFloorController();
+
+        floorControllers.set(roomId, controller);
+        return controller;
+      },
+      createRunner,
+      createSilenceTimer: () => new FakeSilenceTimer(),
+      logger: createLogger(),
+      pingRedis: async () => undefined,
+      pollIntervalMs: 60_000,
+      roomRepository: {
+        listActiveRooms: vi.fn(async () => currentRooms),
+      },
+      testDatabaseConnection: async () => ({
+        databaseName: "postgres",
+        serverTime: "2026-03-28 12:00:00+00",
+      }),
+      transcriptRepository: {
+        insertTranscriptEvent: vi.fn(async () => undefined),
+        listRecentByRoomId: vi.fn(async () => []),
+      },
+      healthPort: 0,
+    });
+
+    await orchestrator.start();
+    await flushMicrotasks();
+
+    const hostRunner = runners.get(`room-a:${HOST_AGENT.id}`)?.[0];
+    const rexRunner = runners.get(`room-a:${PARTICIPANT_AGENT.id}`)?.[0];
+    const sageRunner = runners.get(`room-a:${SAGE_AGENT.id}`)?.[0];
+    const floorController = floorControllers.get("room-a");
+
+    rexRunner?.requestTurn.mockClear();
+    sageRunner?.requestTurn.mockClear();
+    await floorController?.setAgentLastSpoke(PARTICIPANT_AGENT.id, Date.now());
+    floorController?.setHolder(null);
+    hostRunner?.setExecutingTurn(false);
+
+    hostRunner?.emit("turnReadyForPlayback", {
+      roomId: "room-a",
+      agentId: HOST_AGENT.id,
+      content: "Rex, push back on that timeline before we move on.",
+      timestamp: new Date().toISOString(),
+      wasFiltered: false,
+    });
+    hostRunner?.emit("turnCompleted", {
+      roomId: "room-a",
+      agentId: HOST_AGENT.id,
+      turnCount: 1,
+      lastSpokeAt: Date.now(),
+    });
+
+    await vi.waitFor(() => {
+      expect(rexRunner?.requestTurn).toHaveBeenCalledTimes(1);
+    });
+    expect(sageRunner?.requestTurn).not.toHaveBeenCalled();
 
     await orchestrator.stop();
   });

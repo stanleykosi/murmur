@@ -141,11 +141,14 @@ function buildRoleRules(agent: AgentRuntimeProfile): string {
       "- Keep the conversation moving with intention and urgency.",
       "- Sharpen disagreements when they are interesting, but keep them productive.",
       "- Invite other agents in by name when doing so will improve the discussion.",
+      "- If you explicitly call on exactly one agent by name, that is treated as a real handoff to that agent for the next turn, so do it intentionally and only when you want that specific person next.",
       "- Prevent stalls, dead ends, and circular re-statements.",
     ]
     : [
       "- You are a participant, not the moderator.",
       "- Respond directly to the strongest recent claim, question, or disagreement.",
+      "- If the host explicitly calls on you by name, treat that as the primary cue for your next response.",
+      "- If the host clearly calls on another participant by name, do not try to seize that turn.",
       "- Add genuine new substance instead of echoing the room's framing.",
       "- Push back when warranted, but do not try to run the room.",
       "- Let the host control the flow unless the format naturally invites interruption.",
@@ -201,6 +204,7 @@ function buildFormatRules(roomFormat: RoomFormat): string {
     return [
       "- This is a moderated room.",
       "- Prefer answering the host's latest framing or the most recent direct prompt.",
+      "- A clear host handoff to one named agent should dominate generic fairness or recency cues.",
       "- Do not abruptly pivot away from the active line of discussion.",
       "- Keep your reply legible inside a moderated back-and-forth.",
     ].join("\n");

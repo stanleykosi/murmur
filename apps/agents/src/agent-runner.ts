@@ -9,6 +9,7 @@
 
 import {
   SILENCE_THRESHOLD_MS,
+  filterContent,
   type TranscriptEntry,
   type TranscriptEvent,
 } from "@murmur/shared";
@@ -28,6 +29,7 @@ import {
   type AgentGraphState,
   type AgentSessionBridge,
   type FinalizeTurnInput,
+  type TurnReadyForPlaybackInput,
 } from "./graph/state.js";
 import { createLogger } from "./lib/logger.js";
 import { captureRuntimeError, normalizeError } from "./lib/runtime-errors.js";
@@ -41,6 +43,12 @@ import { createAgentToken } from "./services/livekit.service.js";
 import type { TranscriptRepository } from "./services/transcript-repository.js";
 import { createTTSProvider, type TTSProvider } from "./tts/provider.js";
 import { convertPcmAudioToFrames } from "./graph/livekit-session-bridge.js";
+import {
+  executeSpeakTurn,
+} from "./graph/nodes/speak.js";
+import {
+  normalizeTranscriptSnapshot,
+} from "./graph/nodes/listen.js";
 import { ensureLiveKitLoggerInitialized } from "./livekit/logger.js";
 import {
   AUDIO_OUTPUT_EVENT_PLAYBACK_STARTED,
@@ -276,14 +284,30 @@ export interface AgentRunnerTurnRequest {
 }
 
 /**
+ * Optional background-preparation overrides used to warm the likely next turn.
+ */
+export interface AgentRunnerPrepareRequest {
+  promptOverride?: string | null;
+  transcriptSnapshot?: TranscriptEntry[];
+}
+
+/**
  * Public event names emitted by the runner.
  */
 export type AgentRunnerEventName =
   | "ready"
+  | "turnReadyForPlayback"
   | "turnCompleted"
   | "turnDeadlineMissed"
   | "error"
   | "stopped";
+
+interface PreparedTurn {
+  audioBuffer: Buffer;
+  responseText: string;
+  responseWasFiltered: boolean;
+  transcriptSignature: string;
+}
 
 /**
  * Bridge-construction options for the runner's custom session adapter.
@@ -608,6 +632,8 @@ export class AgentRunner extends EventEmitter {
 
   private graph: ReturnType<typeof createAgentGraph> | null = null;
 
+  private graphBindings: AgentGraphBindings | null = null;
+
   private graphState: AgentGraphState | null = null;
 
   private pendingPromptOverride: string | null = null;
@@ -633,6 +659,12 @@ export class AgentRunner extends EventEmitter {
   private ttsProvider: TTSProvider | null = null;
 
   private vadDetector: VADDetectorLike | null = null;
+
+  private preparedTurn: PreparedTurn | null = null;
+
+  private preparedTurnPromise: Promise<PreparedTurn | null> | null = null;
+
+  private preparedTurnSignature: string | null = null;
 
   /**
    * Creates one runner for a specific room-assigned agent.
@@ -688,6 +720,10 @@ export class AgentRunner extends EventEmitter {
   }
 
   public override on(
+    eventName: "turnReadyForPlayback",
+    listener: (payload: TurnReadyForPlaybackInput) => void,
+  ): this;
+  public override on(
     eventName: "ready",
     listener: (payload: AgentRunnerReadyPayload) => void,
   ): this;
@@ -711,6 +747,10 @@ export class AgentRunner extends EventEmitter {
     return super.on(eventName, listener);
   }
 
+  public override emit(
+    eventName: "turnReadyForPlayback",
+    payload: TurnReadyForPlaybackInput,
+  ): boolean;
   public override emit(
     eventName: "ready",
     payload: AgentRunnerReadyPayload,
@@ -751,6 +791,57 @@ export class AgentRunner extends EventEmitter {
    */
   public isExecutingTurn(): boolean {
     return this.turnExecuting && !this.stopping;
+  }
+
+  /**
+   * Starts background preparation for a likely next turn using a projected transcript.
+   *
+   * @param request - Optional projected transcript snapshot and prompt override.
+   */
+  public async prepareTurn(request: AgentRunnerPrepareRequest = {}): Promise<void> {
+    if (!this.ready || !this.ttsProvider) {
+      return;
+    }
+
+    if (this.stopping || this.turnExecuting) {
+      return;
+    }
+
+    const promptOverride = normalizeOptionalPromptOverride(request.promptOverride);
+    const transcriptSnapshot = normalizeTranscriptSnapshot(
+      request.transcriptSnapshot ?? this.transcriptBuffer.getSnapshot(),
+      this.room.roomId,
+    );
+    const transcriptSignature = createPreparedTurnSignature(
+      transcriptSnapshot,
+      promptOverride,
+    );
+
+    if (this.preparedTurn?.transcriptSignature === transcriptSignature) {
+      return;
+    }
+
+    if (this.preparedTurnSignature === transcriptSignature && this.preparedTurnPromise) {
+      await this.preparedTurnPromise;
+      return;
+    }
+
+    this.preparedTurnSignature = transcriptSignature;
+    this.preparedTurnPromise = this.buildPreparedTurn(
+      transcriptSnapshot,
+      promptOverride,
+      transcriptSignature,
+    );
+
+    try {
+      this.preparedTurn = await this.preparedTurnPromise;
+    } finally {
+      this.preparedTurnPromise = null;
+
+      if (this.preparedTurn?.transcriptSignature !== transcriptSignature) {
+        this.preparedTurnSignature = this.preparedTurn?.transcriptSignature ?? null;
+      }
+    }
   }
 
   /**
@@ -820,12 +911,13 @@ export class AgentRunner extends EventEmitter {
         now: () => this.now().getTime(),
       });
 
-      this.graph = createAgentGraph(this.createGraphBindings({
+      this.graphBindings = this.createGraphBindings({
         contextManager,
         llmProvider,
         sessionBridge,
         ttsProvider,
-      }));
+      });
+      this.graph = createAgentGraph(this.graphBindings);
       this.graphState = createInitialAgentGraphState({
         agentId: this.agent.id,
         roomId: this.room.roomId,
@@ -874,6 +966,14 @@ export class AgentRunner extends EventEmitter {
     }
 
     const promptOverride = normalizeOptionalPromptOverride(request.promptOverride);
+    const currentTranscriptSnapshot = normalizeTranscriptSnapshot(
+      this.transcriptBuffer.getSnapshot(),
+      this.room.roomId,
+    );
+    const preparedTurnSignature = createPreparedTurnSignature(
+      currentTranscriptSnapshot,
+      promptOverride,
+    );
 
     this.turnExecutionPromise = this.turnExecutionPromise
       .catch(() => undefined)
@@ -896,7 +996,22 @@ export class AgentRunner extends EventEmitter {
         }, env.AGENT_TURN_DEADLINE_MS);
 
         try {
-          this.graphState = await this.graph!.invoke(this.graphState);
+          const preparedTurn = await this.consumePreparedTurn(preparedTurnSignature);
+
+          if (preparedTurn && this.graphBindings) {
+            this.graphState = {
+              ...this.graphState!,
+              ...await executeSpeakTurn(
+                this.graphBindings,
+                this.graphState!,
+                preparedTurn.responseText,
+                preparedTurn.responseWasFiltered,
+                preparedTurn.audioBuffer,
+              ),
+            };
+          } else {
+            this.graphState = await this.graph!.invoke(this.graphState);
+          }
 
           if (!this.stopping) {
             this.emit("turnCompleted", {
@@ -969,6 +1084,7 @@ export class AgentRunner extends EventEmitter {
     await this.roomConnection?.disconnect().catch(() => undefined);
 
     this.graph = null;
+    this.graphBindings = null;
     this.graphState = null;
     this.session = null;
     this.vadDetector = null;
@@ -977,6 +1093,9 @@ export class AgentRunner extends EventEmitter {
     this.ttsProvider = null;
     this.turnExecuting = false;
     this.turnAbortController = null;
+    this.preparedTurn = null;
+    this.preparedTurnPromise = null;
+    this.preparedTurnSignature = null;
 
     if (this.turnDeadlineTimer) {
       clearTimeout(this.turnDeadlineTimer);
@@ -1118,6 +1237,13 @@ export class AgentRunner extends EventEmitter {
           );
         }
       },
+      onTurnReadyForPlayback: async (input: TurnReadyForPlaybackInput): Promise<void> => {
+        if (this.stopping) {
+          return;
+        }
+
+        this.emit("turnReadyForPlayback", input);
+      },
       logger: this.logger,
       now: this.now,
     };
@@ -1171,4 +1297,136 @@ export class AgentRunner extends EventEmitter {
       });
     }
   }
+
+  /**
+   * Builds a speculative prepared turn from a projected transcript snapshot.
+   */
+  private async buildPreparedTurn(
+    transcriptSnapshot: TranscriptEntry[],
+    promptOverride: string | null,
+    transcriptSignature: string,
+  ): Promise<PreparedTurn | null> {
+    if (!this.ttsProvider || !this.ready || this.stopping) {
+      return null;
+    }
+
+    try {
+      const systemPrompt = this.buildSystemPrompt(promptOverride);
+      const transcriptContext = this.buildTranscriptContext(transcriptSnapshot);
+      const responseText = await this.baseLLMProvider.generateResponse(
+        systemPrompt,
+        transcriptContext,
+      );
+      const moderationResult = filterContent(responseText);
+      const audioBuffer = await this.ttsProvider.synthesize(
+        moderationResult.clean,
+        this.agent.voiceId,
+      );
+
+      return {
+        audioBuffer,
+        responseText: moderationResult.clean,
+        responseWasFiltered: moderationResult.wasFiltered,
+        transcriptSignature,
+      };
+    } catch (error) {
+      this.logger.warn(
+        {
+          agentId: this.agent.id,
+          roomId: this.room.roomId,
+          err: error,
+        },
+        "Failed to prepare a speculative turn in the background.",
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Consumes a prepared turn when it exactly matches the current transcript state.
+   */
+  private async consumePreparedTurn(
+    transcriptSignature: string,
+  ): Promise<PreparedTurn | null> {
+    if (this.preparedTurn?.transcriptSignature === transcriptSignature) {
+      const preparedTurn = this.preparedTurn;
+
+      this.preparedTurn = null;
+      this.preparedTurnSignature = null;
+
+      return preparedTurn;
+    }
+
+    if (this.preparedTurnSignature === transcriptSignature && this.preparedTurnPromise) {
+      const preparedTurn = await this.preparedTurnPromise;
+
+      if (preparedTurn?.transcriptSignature === transcriptSignature) {
+        this.preparedTurn = null;
+        this.preparedTurnSignature = null;
+        return preparedTurn;
+      }
+    }
+
+    this.preparedTurn = null;
+
+    if (this.preparedTurnSignature !== transcriptSignature) {
+      this.preparedTurnSignature = null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Builds the canonical system prompt for this runner and optional override.
+   */
+  private buildSystemPrompt(promptOverride: string | null): string {
+    return buildAgentSystemPrompt({
+      roomTitle: this.room.title,
+      roomTopic: this.room.topic,
+      roomFormat: this.room.format,
+      agent: this.agent,
+      peers: this.room.agents.filter((agent) => agent.id !== this.agent.id),
+      turnOverride: promptOverride,
+    });
+  }
+
+  /**
+   * Formats a transcript snapshot into the canonical rolling prompt context.
+   */
+  private buildTranscriptContext(transcriptSnapshot: TranscriptEntry[]): string {
+    const contextManager = new ContextManager({
+      now: () => this.now().getTime(),
+    });
+
+    contextManager.clear();
+
+    for (const entry of transcriptSnapshot) {
+      contextManager.addEntry({
+        agentName: entry.agentName,
+        content: entry.content,
+        timestamp: entry.timestamp,
+      });
+    }
+
+    return contextManager.getContext();
+  }
+}
+
+/**
+ * Produces a stable cache signature for one speculative turn input.
+ */
+function createPreparedTurnSignature(
+  transcriptSnapshot: readonly TranscriptEntry[],
+  promptOverride: string | null,
+): string {
+  return JSON.stringify({
+    promptOverride,
+    transcript: transcriptSnapshot.map((entry) => ({
+      agentId: entry.agentId,
+      content: entry.content,
+      id: entry.id,
+      timestamp: entry.timestamp,
+      wasFiltered: entry.wasFiltered,
+    })),
+  });
 }

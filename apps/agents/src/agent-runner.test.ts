@@ -472,6 +472,40 @@ describe("AgentRunner", () => {
   });
 
   /**
+   * Speculative preparation should warm the next turn once, then let the
+   * foreground request reuse that prepared text and audio instead of repeating
+   * LLM generation and synthesis during handoff.
+   */
+  it("reuses a prepared turn without performing a second LLM or TTS pass", async () => {
+    const module = await importAgentRunnerModule();
+    const fixture = createRunnerFixture(module, {
+      llmResponses: [
+        "The next speaker should challenge the weakest assumption before the room settles too fast.",
+      ],
+    });
+
+    await fixture.runner.start();
+    await fixture.runner.prepareTurn();
+
+    expect(fixture.baseLLMProvider.generateResponse).toHaveBeenCalledTimes(1);
+    expect(fixture.ttsProvider.synthesize).toHaveBeenCalledTimes(1);
+    expect(fixture.transcriptBuffer.getSnapshot()).toHaveLength(1);
+
+    await fixture.runner.requestTurn();
+
+    expect(fixture.baseLLMProvider.generateResponse).toHaveBeenCalledTimes(1);
+    expect(fixture.ttsProvider.synthesize).toHaveBeenCalledTimes(1);
+    expect(fixture.sessionBridge.speakText).toHaveBeenCalledWith(
+      "The next speaker should challenge the weakest assumption before the room settles too fast.",
+      expect.any(Buffer),
+    );
+    expect(fixture.transcriptRepository.insertTranscriptEvent).toHaveBeenCalledTimes(1);
+    expect(fixture.transcriptPublisher.publishTranscript).toHaveBeenCalledTimes(1);
+
+    await fixture.runner.stop();
+  });
+
+  /**
    * Realtime broadcast failures should not invalidate a turn after the
    * transcript has already been persisted locally.
    */

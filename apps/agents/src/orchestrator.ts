@@ -21,6 +21,7 @@ import {
   type TranscriptRepository,
 } from "./services/transcript-repository.js";
 import type { AgentRuntimeProfile } from "./runtime/agent-profile.js";
+import type { TranscriptEntry } from "@murmur/shared";
 import http from "node:http";
 import { fileURLToPath } from "node:url";
 
@@ -63,9 +64,32 @@ export interface AgentRunnerLike {
   getAgentProfile(): AgentRuntimeProfile;
   isReady(): boolean;
   isExecutingTurn(): boolean;
+  prepareTurn(request?: {
+    promptOverride?: string | null;
+    transcriptSnapshot?: {
+      id: string;
+      roomId: string;
+      agentId: string;
+      agentName: string;
+      content: string;
+      timestamp: string;
+      accentColor: string;
+      wasFiltered: boolean;
+    }[];
+  }): Promise<void>;
   start(): Promise<void>;
   stop(): Promise<void>;
   requestTurn(request?: AgentRunnerTurnRequest): Promise<void>;
+  on(
+    eventName: "turnReadyForPlayback",
+    listener: (payload: {
+      roomId: string;
+      agentId: string;
+      content: string;
+      timestamp: string;
+      wasFiltered: boolean;
+    }) => void,
+  ): this;
   on(eventName: "ready", listener: (payload: { roomId: string; agentId: string }) => void): this;
   on(
     eventName: "turnCompleted",
@@ -77,6 +101,16 @@ export interface AgentRunnerLike {
   ): this;
   on(eventName: "error", listener: (error: Error) => void): this;
   on(eventName: "stopped", listener: (payload: { roomId: string; agentId: string }) => void): this;
+  off(
+    eventName: "turnReadyForPlayback",
+    listener: (payload: {
+      roomId: string;
+      agentId: string;
+      content: string;
+      timestamp: string;
+      wasFiltered: boolean;
+    }) => void,
+  ): this;
   off(eventName: "ready", listener: (payload: { roomId: string; agentId: string }) => void): this;
   off(
     eventName: "turnCompleted",
@@ -149,6 +183,13 @@ export interface OrchestratorDependencies {
 }
 
 interface RunnerEventHandlers {
+  handleTurnReadyForPlayback: (payload: {
+    roomId: string;
+    agentId: string;
+    content: string;
+    timestamp: string;
+    wasFiltered: boolean;
+  }) => void;
   handleReady: (payload: { roomId: string; agentId: string }) => void;
   handleTurnCompleted: (payload: { roomId: string; agentId: string; turnCount: number; lastSpokeAt: number }) => void;
   handleTurnDeadlineMissed: (payload: { roomId: string; agentId: string; deadlineMs: number }) => void;
@@ -170,6 +211,7 @@ interface RoomRuntime {
   schedulerQueue: Promise<void>;
   restartAttempts: Map<string, number>;
   restartTimers: Map<string, NodeJS.Timeout>;
+  directedNextSpeakerId: string | null;
 }
 
 interface DetachedTaskContext {
@@ -177,6 +219,117 @@ interface DetachedTaskContext {
   roomId?: string;
   agentId?: string;
   [key: string]: unknown;
+}
+
+/**
+ * Builds the projected transcript entry used for speculative next-turn preparation.
+ *
+ * @param runtime - Room runtime whose agent roster supplies display metadata.
+ * @param agentId - Speaker whose imminent turn should be projected.
+ * @param payload - Final moderated turn text and projected timestamp.
+ * @returns A transcript entry that mirrors the soon-to-be-published turn.
+ */
+function createProjectedTranscriptEntry(
+  runtime: RoomRuntime,
+  agentId: string,
+  payload: {
+    content: string;
+    timestamp: string;
+    wasFiltered: boolean;
+  },
+): TranscriptEntry {
+  const agent = runtime.room.agents.find((candidate) => candidate.id === agentId);
+
+  if (!agent) {
+    throw new Error(
+      `Cannot project transcript entry for unknown room agent "${agentId}".`,
+    );
+  }
+
+  return {
+    id: `projected:${agentId}:${payload.timestamp}`,
+    roomId: runtime.room.id,
+    agentId,
+    agentName: agent.name,
+    content: payload.content,
+    timestamp: payload.timestamp,
+    accentColor: agent.accentColor,
+    wasFiltered: payload.wasFiltered,
+  };
+}
+
+/**
+ * Escapes a speaker name for safe inclusion inside a regular expression.
+ *
+ * @param value - Agent display name.
+ * @returns The escaped literal pattern.
+ */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Attempts to extract a host-directed handoff target from the just-finished
+ * host utterance. This only returns a target when the host clearly calls on
+ * exactly one named peer; otherwise scheduling falls back to the canonical
+ * fairness scorer.
+ *
+ * @param runtime - Room runtime whose roster defines valid peer names.
+ * @param currentSpeakerId - Agent that produced the current speaking turn.
+ * @param content - Final moderated turn text.
+ * @returns The explicitly called-on agent id, or `null`.
+ */
+function extractDirectedNextSpeakerId(
+  runtime: RoomRuntime,
+  currentSpeakerId: string,
+  content: string,
+): string | null {
+  const currentSpeaker = runtime.room.agents.find(
+    (candidate) => candidate.id === currentSpeakerId,
+  );
+
+  if (!currentSpeaker || currentSpeaker.role !== "host") {
+    return null;
+  }
+
+  const normalizedContent = content.trim();
+
+  if (normalizedContent.length === 0) {
+    return null;
+  }
+
+  const candidateMatches = runtime.room.agents
+    .filter((agent) => agent.id !== currentSpeakerId)
+    .map((agent) => {
+      const escapedName = escapeRegExp(agent.name.trim());
+      const directAddressPattern = new RegExp(
+        `(?:^|[.!?]\\s+|\\n)\\s*${escapedName}\\s*[,?:-]`,
+        "i",
+      );
+      const addressedQuestionPattern = new RegExp(
+        `(?:what do you think|where do you land|how do you see it|take that|respond to that|weigh in|jump in|come in here)\\s*,?\\s*${escapedName}\\b`,
+        "i",
+      );
+      const invitationPattern = new RegExp(
+        `${escapedName}\\s*,?\\s*(?:what do you think|where do you land|how do you see it|push back|pressure-test that|respond|jump in|weigh in|take that|go ahead)`,
+        "i",
+      );
+
+      return {
+        agentId: agent.id,
+        matched:
+          directAddressPattern.test(normalizedContent)
+          || addressedQuestionPattern.test(normalizedContent)
+          || invitationPattern.test(normalizedContent),
+      };
+    })
+    .filter((candidate) => candidate.matched);
+
+  if (candidateMatches.length !== 1) {
+    return null;
+  }
+
+  return candidateMatches[0]?.agentId ?? null;
 }
 
 /**
@@ -482,6 +635,7 @@ export class Orchestrator {
       schedulerQueue: Promise.resolve(),
       restartAttempts: new Map(),
       restartTimers: new Map(),
+      directedNextSpeakerId: null,
     };
 
     const handleDeadAir = (payload: DeadAirDetectedPayload) => {
@@ -530,6 +684,7 @@ export class Orchestrator {
         const handlers = this.createRunnerHandlers(room.id, agent.id);
 
         runner.on("ready", handlers.handleReady);
+        runner.on("turnReadyForPlayback", handlers.handleTurnReadyForPlayback);
         runner.on("turnCompleted", handlers.handleTurnCompleted);
         runner.on("turnDeadlineMissed", handlers.handleTurnDeadlineMissed);
         runner.on("error", handlers.handleError);
@@ -676,6 +831,7 @@ export class Orchestrator {
     handlers: RunnerEventHandlers,
   ): void {
     runner.off("ready", handlers.handleReady);
+    runner.off("turnReadyForPlayback", handlers.handleTurnReadyForPlayback);
     runner.off("turnCompleted", handlers.handleTurnCompleted);
     runner.off("turnDeadlineMissed", handlers.handleTurnDeadlineMissed);
     runner.off("error", handlers.handleError);
@@ -691,6 +847,16 @@ export class Orchestrator {
    */
   private createRunnerHandlers(roomId: string, agentId: string): RunnerEventHandlers {
     return {
+      handleTurnReadyForPlayback: (payload) => {
+        this.runDetachedTask(
+          this.prepareLikelyNextSpeaker(roomId, agentId, payload),
+          {
+            stage: "speculative_turn_preparation",
+            roomId,
+            agentId,
+          },
+        );
+      },
       handleReady: () => {
         this.logger.debug({ roomId, agentId }, "Runner reported ready.");
       },
@@ -811,6 +977,49 @@ export class Orchestrator {
         return;
       }
 
+      const directedNextSpeakerId = runtime.directedNextSpeakerId;
+
+      if (directedNextSpeakerId) {
+        const directedRunner = runtime.runners.get(directedNextSpeakerId);
+
+        if (
+          directedRunner
+          && directedRunner.isReady()
+          && !directedRunner.isExecutingTurn()
+          && !await runtime.floorController.isAgentMuted(directedNextSpeakerId)
+        ) {
+          const claimed = await runtime.floorController.claimFloor(
+            directedNextSpeakerId,
+          );
+
+          if (claimed) {
+            runtime.directedNextSpeakerId = null;
+
+            this.logger.info(
+              {
+                roomId,
+                agentId: directedNextSpeakerId,
+                reason,
+              },
+              "Scheduled next speaker from an explicit host-directed handoff.",
+            );
+
+            try {
+              await directedRunner.requestTurn();
+            } catch (error) {
+              await runtime.floorController.releaseFloor(
+                directedNextSpeakerId,
+              ).catch(() => undefined);
+              throw error;
+            }
+
+            return;
+          }
+        }
+
+        runtime.directedNextSpeakerId = null;
+      }
+
       const candidates = await Promise.all(
         runtime.room.agents.map(async (agent) => {
           const runner = runtime.runners.get(agent.id);
@@ -869,6 +1078,110 @@ export class Orchestrator {
         await runtime.floorController.releaseFloor(nextSpeaker.id).catch(() => undefined);
         throw error;
       }
+    });
+  }
+
+  /**
+   * Prepares the most likely next speaker while the current turn is still
+   * synthesizing or playing, so handoff can start with a warm response.
+   *
+   * @param roomId - Room identifier whose next speaker should be prepared.
+   * @param currentSpeakerId - Agent currently entering playback.
+   * @param payload - Final moderated text for the current speaking turn.
+   */
+  private async prepareLikelyNextSpeaker(
+    roomId: string,
+    currentSpeakerId: string,
+    payload: {
+      roomId: string;
+      agentId: string;
+      content: string;
+      timestamp: string;
+      wasFiltered: boolean;
+    },
+  ): Promise<void> {
+    if (this.stopping) {
+      return;
+    }
+
+    const runtime = this.roomRuntimes.get(roomId);
+
+    if (!runtime) {
+      return;
+    }
+
+    runtime.directedNextSpeakerId = extractDirectedNextSpeakerId(
+      runtime,
+      currentSpeakerId,
+      payload.content,
+    );
+
+    const projectedTranscript = [
+      ...runtime.transcriptBuffer.getSnapshot(),
+      createProjectedTranscriptEntry(runtime, currentSpeakerId, payload),
+    ];
+    const directedNextSpeakerId = runtime.directedNextSpeakerId;
+
+    if (directedNextSpeakerId) {
+      const directedRunner = runtime.runners.get(directedNextSpeakerId);
+
+      if (
+        directedRunner
+        && directedRunner.isReady()
+        && !directedRunner.isExecutingTurn()
+        && !await runtime.floorController.isAgentMuted(directedNextSpeakerId)
+      ) {
+        await directedRunner.prepareTurn({
+          transcriptSnapshot: projectedTranscript,
+        });
+        return;
+      }
+
+      runtime.directedNextSpeakerId = null;
+    }
+
+    const candidates = await Promise.all(
+      runtime.room.agents.map(async (agent) => {
+        if (agent.id === currentSpeakerId) {
+          return null;
+        }
+
+        const runner = runtime.runners.get(agent.id);
+
+        if (!runner || !runner.isReady() || runner.isExecutingTurn()) {
+          return null;
+        }
+
+        if (await runtime.floorController.isAgentMuted(agent.id)) {
+          return null;
+        }
+
+        return {
+          id: agent.id,
+          role: agent.role,
+          lastSpokeAt: await runtime.floorController.getAgentLastSpoke(agent.id),
+        };
+      }),
+    );
+    const nextSpeaker = selectNextSpeaker(
+      candidates.filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null),
+      {
+        now: () => Date.parse(payload.timestamp),
+      },
+    );
+
+    if (!nextSpeaker) {
+      return;
+    }
+
+    const runner = runtime.runners.get(nextSpeaker.id);
+
+    if (!runner || !runner.isReady() || runner.isExecutingTurn()) {
+      return;
+    }
+
+    await runner.prepareTurn({
+      transcriptSnapshot: projectedTranscript,
     });
   }
 
@@ -984,6 +1297,7 @@ export class Orchestrator {
       const handlers = this.createRunnerHandlers(roomId, agentId);
 
       runner.on("ready", handlers.handleReady);
+      runner.on("turnReadyForPlayback", handlers.handleTurnReadyForPlayback);
       runner.on("turnCompleted", handlers.handleTurnCompleted);
       runner.on("turnDeadlineMissed", handlers.handleTurnDeadlineMissed);
       runner.on("error", handlers.handleError);

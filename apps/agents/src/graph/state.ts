@@ -56,6 +56,17 @@ export interface FinalizeTurnInput {
 }
 
 /**
+ * Payload emitted when a moderated turn is ready to enter speech playback.
+ */
+export interface TurnReadyForPlaybackInput {
+  roomId: string;
+  agentId: string;
+  content: string;
+  timestamp: string;
+  wasFiltered: boolean;
+}
+
+/**
  * Minimal logger surface required by the graph nodes.
  */
 export interface AgentGraphLogger {
@@ -92,6 +103,7 @@ export interface AgentGraphBindings {
   getTranscriptSnapshot(): Promise<TranscriptEntry[]>;
   publishTranscript(event: TranscriptEvent): Promise<void>;
   finalizeTurn(input: FinalizeTurnInput): Promise<void>;
+  onTurnReadyForPlayback?(input: TurnReadyForPlaybackInput): Promise<void>;
   logger: AgentGraphLogger;
   now(): Date;
 }

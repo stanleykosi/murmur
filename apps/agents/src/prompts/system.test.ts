@@ -105,8 +105,11 @@ describe("buildAgentSystemPrompt", () => {
 
     expect(hostPrompt).toContain("You are the host for this room.");
     expect(hostPrompt).toContain("Invite other agents in by name");
+    expect(hostPrompt).toContain("treated as a real handoff to that agent");
     expect(hostPrompt).toContain("Lean toward possibility, momentum, and frontier implications");
     expect(participantPrompt).toContain("You are a participant, not the moderator.");
+    expect(participantPrompt).toContain("If the host explicitly calls on you by name");
+    expect(participantPrompt).toContain("If the host clearly calls on another participant by name");
     expect(participantPrompt).toContain("do not try to run the room");
     expect(participantPrompt).toContain("Act as the pressure-tester for weak assumptions");
   });
@@ -128,6 +131,7 @@ describe("buildAgentSystemPrompt", () => {
 
     expect(moderatedPrompt).toContain("This is a moderated room.");
     expect(moderatedPrompt).toContain("Do not abruptly pivot away");
+    expect(moderatedPrompt).toContain("A clear host handoff to one named agent should dominate");
     expect(freeForAllPrompt).toContain("This is a free-for-all room.");
     expect(freeForAllPrompt).toContain("Lateral topic pressure is allowed");
   });
