@@ -8,6 +8,7 @@ import {
   normalizeError,
   normalizeSynthesisText,
   normalizeVoiceId,
+  readResponseBodyAsBuffer,
   TTS_MAX_ATTEMPTS,
   TTS_REQUEST_TIMEOUT_MS,
   TtsMissingBodyError,
@@ -23,12 +24,65 @@ export const MISTRAL_TTS_ENDPOINT = "https://api.mistral.ai/v1/audio/speech";
 
 export const MISTRAL_MODEL_ID = "voxtral-mini-tts-2603";
 
-export const MISTRAL_OUTPUT_FORMAT = "pcm" as const;
+export const MISTRAL_OUTPUT_FORMAT = "wav" as const;
 
 const mistralLogger = createTtsLogger("tts-mistral");
 
-interface MistralResponseBody {
-  audio_data: string;
+function parseWavAudio(wavBuffer: Buffer): Buffer {
+  const riff = wavBuffer.toString("ascii", 0, 4);
+  if (riff !== "RIFF") {
+    throw new Error("Invalid WAV file: missing RIFF header");
+  }
+
+  const wave = wavBuffer.toString("ascii", 8, 12);
+  if (wave !== "WAVE") {
+    throw new Error("Invalid WAV file: missing WAVE header");
+  }
+
+  let offset = 12;
+  let audioData: Buffer | null = null;
+  let bitDepth = 16;
+  let numChannels = 1;
+
+  while (offset < wavBuffer.length - 8) {
+    const chunkId = wavBuffer.toString("ascii", offset, offset + 4);
+    const chunkSize = wavBuffer.readUInt32LE(offset + 4);
+
+    if (chunkId === "fmt ") {
+      const audioFormat = wavBuffer.readUInt16LE(offset + 8);
+      numChannels = wavBuffer.readUInt16LE(offset + 10);
+      bitDepth = wavBuffer.readUInt16LE(offset + 22);
+
+      if (audioFormat !== 1 && audioFormat !== 3) {
+        throw new Error(
+          `Unsupported WAV audio format: ${audioFormat}. Only PCM (1) and float32 (3) are supported.`,
+        );
+      }
+    }
+
+    if (chunkId === "data") {
+      audioData = wavBuffer.subarray(offset + 8, offset + 8 + chunkSize);
+      break;
+    }
+
+    offset += 8 + chunkSize;
+  }
+
+  if (!audioData) {
+    throw new Error("Invalid WAV file: no data chunk found");
+  }
+
+  if (bitDepth === 32) {
+    const floatSamples = new Float32Array(audioData.buffer, audioData.byteOffset, audioData.length / 4);
+    const int16Samples = new Int16Array(floatSamples.length);
+    for (let i = 0; i < floatSamples.length; i++) {
+      const sample = Math.max(-1, Math.min(1, floatSamples[i] ?? 0));
+      int16Samples[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+    }
+    return Buffer.from(int16Samples.buffer);
+  }
+
+  return audioData;
 }
 
 export class MistralTTSProvider implements TTSProvider {
@@ -75,13 +129,12 @@ export class MistralTTSProvider implements TTSProvider {
           throw new TtsResponseError("Mistral", response.status, responseText);
         }
 
-        const responseBody = (await response.json()) as MistralResponseBody;
+        const wavBuffer = await readResponseBodyAsBuffer(
+          response,
+          "Mistral",
+        );
 
-        if (!responseBody.audio_data) {
-          throw new TtsMissingBodyError("Mistral");
-        }
-
-        const audioBuffer = Buffer.from(responseBody.audio_data, "base64");
+        const audioBuffer = parseWavAudio(wavBuffer);
 
         this.logger.info(
           {
