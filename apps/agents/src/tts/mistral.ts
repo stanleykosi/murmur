@@ -129,10 +129,20 @@ export class MistralTTSProvider implements TTSProvider {
           throw new TtsResponseError("Mistral", response.status, responseText);
         }
 
-        const wavBuffer = await readResponseBodyAsBuffer(
-          response,
-          "Mistral",
-        );
+        const responseText = await response.text();
+
+        let wavBuffer: Buffer;
+        try {
+          const responseBody = JSON.parse(responseText);
+          if (!responseBody.audio_data) {
+            throw new TtsMissingBodyError("Mistral");
+          }
+          wavBuffer = Buffer.from(responseBody.audio_data, "base64");
+        } catch {
+          throw new Error(
+            `Failed to parse Mistral response: ${responseText.slice(0, 200)}`,
+          );
+        }
 
         const audioBuffer = parseWavAudio(wavBuffer);
 
