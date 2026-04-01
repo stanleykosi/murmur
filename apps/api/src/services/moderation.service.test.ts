@@ -11,6 +11,16 @@ import { filterContent } from "./moderation.service.js";
 
 describe("filterContent", () => {
   /**
+   * Empty messages should remain empty and unfiltered.
+   */
+  it("returns an unchanged result for an empty string", () => {
+    expect(filterContent("")).toEqual({
+      clean: "",
+      wasFiltered: false,
+    });
+  });
+
+  /**
    * Blocked words are replaced with the canonical `[filtered]` token.
    */
   it("filters blocked words", () => {
@@ -39,5 +49,15 @@ describe("filterContent", () => {
 
     expect(result.wasFiltered).toBe(true);
     expect(result.clean).toBe("[filtered] some text [filtered]");
+  });
+
+  /**
+   * The canonical blocklist should match blocked words regardless of casing.
+   */
+  it("filters blocked words case-insensitively", () => {
+    const result = filterContent("That was FUCKING wild.");
+
+    expect(result.wasFiltered).toBe(true);
+    expect(result.clean).toBe("That was [filtered] wild.");
   });
 });

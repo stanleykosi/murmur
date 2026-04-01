@@ -16,7 +16,7 @@
     "seed": "tsx src/db/seed.ts",
     "start": "node dist/server.js",
     "typecheck": "pnpm --filter @murmur/shared build && tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests --no-file-parallelism"
+    "test": "vitest run --config vitest.config.ts --no-file-parallelism"
   },
   "dependencies": {
     "@clerk/backend": "^1.26.6",

@@ -14,6 +14,15 @@ import {
 
 describe("ContextManager", () => {
   /**
+   * A brand-new manager should expose no prompt context.
+   */
+  it("returns an empty string before any transcript entries are added", () => {
+    const manager = new ContextManager();
+
+    expect(manager.getContext()).toBe("");
+  });
+
+  /**
    * Verifies the manager retains only entries inside the rolling window and
    * formats them in chronological `[Agent]: content` order.
    */

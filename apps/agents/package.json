@@ -13,7 +13,7 @@
     "dev": "tsx watch src/orchestrator.ts",
     "start": "node dist/orchestrator.js",
     "typecheck": "pnpm --filter @murmur/shared build && tsc --noEmit -p tsconfig.json",
-    "test": "pnpm --filter @murmur/shared build && vitest run --passWithNoTests --no-file-parallelism"
+    "test": "pnpm --filter @murmur/shared build && vitest run --config vitest.config.ts --no-file-parallelism"
   },
   "dependencies": {
     "@langchain/core": "^0.3.72",

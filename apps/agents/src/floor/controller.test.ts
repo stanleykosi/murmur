@@ -150,6 +150,9 @@ function createRedisFixture() {
     client,
     delMock,
     evalMock,
+    getFloorHash(key: string) {
+      return hashes.has(key) ? { ...hashes.get(key) } : null;
+    },
     getString(key: string) {
       return strings.get(key) ?? null;
     },
@@ -173,6 +176,48 @@ afterEach(() => {
 });
 
 describe("FloorController", () => {
+  it("claims the floor when the room is currently empty", async () => {
+    const roomId = "room-1";
+    const agentId = "agent-a";
+    const logger = createLogger();
+    const redis = createRedisFixture();
+    const floorStateKey = getFloorStateKey(roomId);
+    const controller = new FloorController(redis.client, roomId, {
+      logger,
+      now: () => 123,
+    });
+
+    await expect(controller.claimFloor(agentId)).resolves.toBe(true);
+    expect(redis.getFloorHash(floorStateKey)).toEqual({
+      holder: agentId,
+      claimedAt: "123",
+    });
+  });
+
+  it("rejects a floor claim when another agent already holds the floor", async () => {
+    const roomId = "room-1";
+    const agentId = "agent-a";
+    const logger = createLogger();
+    const redis = createRedisFixture();
+    const floorStateKey = getFloorStateKey(roomId);
+
+    redis.seedFloorHash(floorStateKey, {
+      holder: "agent-b",
+      claimedAt: "100",
+    });
+
+    const controller = new FloorController(redis.client, roomId, {
+      logger,
+      now: () => 123,
+    });
+
+    await expect(controller.claimFloor(agentId)).resolves.toBe(false);
+    expect(redis.getFloorHash(floorStateKey)).toEqual({
+      holder: "agent-b",
+      claimedAt: "100",
+    });
+  });
+
   it("checks mute membership inside the claim script instead of a preflight lookup", async () => {
     const roomId = "room-1";
     const agentId = "agent-a";
@@ -219,6 +264,67 @@ describe("FloorController", () => {
     await expect(controller.claimFloor(agentId)).rejects.toThrow(
       INCONSISTENT_FLOOR_STATE_ERROR,
     );
+  });
+
+  it("releases the floor only when called by the current holder", async () => {
+    const roomId = "room-1";
+    const agentId = "agent-host";
+    const logger = createLogger();
+    const redis = createRedisFixture();
+    const floorStateKey = getFloorStateKey(roomId);
+
+    redis.seedFloorHash(floorStateKey, {
+      holder: agentId,
+      claimedAt: "111",
+    });
+
+    const controller = new FloorController(redis.client, roomId, {
+      logger,
+      now: () => 456,
+    });
+
+    await expect(controller.releaseFloor(agentId)).resolves.toBe(true);
+    expect(redis.getFloorHash(floorStateKey)).toBeNull();
+  });
+
+  it("rejects release attempts from agents that do not hold the floor", async () => {
+    const roomId = "room-1";
+    const logger = createLogger();
+    const redis = createRedisFixture();
+    const floorStateKey = getFloorStateKey(roomId);
+
+    redis.seedFloorHash(floorStateKey, {
+      holder: "agent-host",
+      claimedAt: "111",
+    });
+
+    const controller = new FloorController(redis.client, roomId, {
+      logger,
+      now: () => 456,
+    });
+
+    await expect(controller.releaseFloor("agent-other")).resolves.toBe(false);
+    expect(redis.getFloorHash(floorStateKey)).toEqual({
+      holder: "agent-host",
+      claimedAt: "111",
+    });
+  });
+
+  it("reports muted-agent membership through the public helper", async () => {
+    const roomId = "room-1";
+    const logger = createLogger();
+    const redis = createRedisFixture();
+    const mutedAgentsKey = getMutedAgentsKey(roomId);
+
+    redis.seedMutedAgent(mutedAgentsKey, "agent-muted");
+
+    const controller = new FloorController(redis.client, roomId, {
+      logger,
+      now: () => 456,
+    });
+
+    await expect(controller.isAgentMuted("agent-muted")).resolves.toBe(true);
+    await expect(controller.isAgentMuted("agent-clear")).resolves.toBe(false);
   });
 
   it("returns the persisted silence timestamp in the public floor state", async () => {
