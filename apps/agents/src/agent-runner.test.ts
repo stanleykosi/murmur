@@ -55,6 +55,7 @@ function createValidEnvironment(
     OPENROUTER_DEFAULT_MAX_TOKENS: "420",
     CARTESIA_API_KEY: "cartesia-key",
     ELEVENLABS_API_KEY: "elevenlabs-key",
+    MISTRAL_API_KEY: "mistral-key",
     SENTRY_DSN: "https://public@example.ingest.sentry.io/1",
     LOG_LEVEL: "silent",
   };

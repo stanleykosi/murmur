@@ -51,6 +51,12 @@ vi.mock("../services/auth.service.js", () => ({
   upsertUser: upsertUserMock,
 }));
 
+vi.mock("../lib/sentry.js", () => ({
+  captureException: (error: unknown) =>
+    error instanceof Error ? error : new Error(String(error)),
+  flushSentry: async () => true,
+}));
+
 type ServerModule = typeof import("../server.js");
 
 let buildServer: ServerModule["buildServer"];

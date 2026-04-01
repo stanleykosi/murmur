@@ -32,7 +32,7 @@ import {
   type TurnReadyForPlaybackInput,
 } from "./graph/state.js";
 import { createLogger } from "./lib/logger.js";
-import { captureRuntimeError, normalizeError } from "./lib/runtime-errors.js";
+import { captureRuntimeError, normalizeError } from "./lib/sentry.js";
 import { createOpenRouterLLMProvider } from "./llm/openrouter.js";
 import type { LLMGenerationOptions, LLMProvider } from "./llm/provider.js";
 import { buildAgentSystemPrompt } from "./prompts/system.js";

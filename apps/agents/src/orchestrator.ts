@@ -12,7 +12,11 @@ import { FloorController } from "./floor/controller.js";
 import { closeDatabasePool, testDatabaseConnection } from "./db/client.js";
 import { closeRedis, connectRedis, pingRedis, redis } from "./lib/redis.js";
 import { createLogger } from "./lib/logger.js";
-import { captureRuntimeError, normalizeError } from "./lib/runtime-errors.js";
+import {
+  captureRuntimeError,
+  flushSentry,
+  normalizeError,
+} from "./lib/sentry.js";
 import { AgentRunner, type AgentRunnerTurnRequest } from "./agent-runner.js";
 import { TranscriptBuffer } from "./runtime/transcript-buffer.js";
 import { RoomRepository, type ActiveRoomRecord } from "./services/room-repository.js";
@@ -1437,12 +1441,66 @@ export class Orchestrator {
  */
 async function main(): Promise<void> {
   const orchestrator = new Orchestrator();
+  const mainLogger = createLogger({ component: "orchestrator-main" });
+
+  let shutdownPromise: Promise<void> | null = null;
+
+  /**
+   * Stops the orchestrator and flushes Sentry exactly once for shutdown and
+   * fatal-process paths.
+   *
+   * @param options - Structured termination metadata.
+   */
+  const shutdown = async (options: {
+    signal?: NodeJS.Signals;
+    fatalError?: unknown;
+    source?: "uncaughtException" | "unhandledRejection";
+  }) => {
+    if (!shutdownPromise) {
+      shutdownPromise = (async () => {
+        if (options.fatalError !== undefined && options.source) {
+          captureRuntimeError(mainLogger, options.fatalError, {
+            stage: options.source,
+          });
+        }
+
+        await orchestrator.stop().catch((error) => {
+          mainLogger.error({ err: error }, "Failed to stop orchestrator cleanly.");
+        });
+        await flushSentry();
+      })().finally(() => {
+        shutdownPromise = null;
+      });
+    }
+
+    await shutdownPromise;
+  };
 
   process.once("SIGINT", () => {
-    void orchestrator.stop();
+    void shutdown({ signal: "SIGINT" }).finally(() => {
+      process.exit(0);
+    });
   });
   process.once("SIGTERM", () => {
-    void orchestrator.stop();
+    void shutdown({ signal: "SIGTERM" }).finally(() => {
+      process.exit(0);
+    });
+  });
+  process.once("uncaughtException", (error) => {
+    void shutdown({
+      fatalError: error,
+      source: "uncaughtException",
+    }).finally(() => {
+      process.exit(1);
+    });
+  });
+  process.once("unhandledRejection", (reason) => {
+    void shutdown({
+      fatalError: reason,
+      source: "unhandledRejection",
+    }).finally(() => {
+      process.exit(1);
+    });
   });
 
   await orchestrator.start();
@@ -1454,6 +1512,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     captureRuntimeError(logger, error, {
       stage: "orchestrator_main",
     });
-    process.exitCode = 1;
+    void flushSentry().finally(() => {
+      process.exit(1);
+    });
   });
 }

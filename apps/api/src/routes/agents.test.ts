@@ -46,6 +46,12 @@ vi.mock("../services/agent.service.js", () => ({
   listAgents: listAgentsMock,
 }));
 
+vi.mock("../lib/sentry.js", () => ({
+  captureException: (error: unknown) =>
+    error instanceof Error ? error : new Error(String(error)),
+  flushSentry: async () => true,
+}));
+
 type ServerModule = typeof import("../server.js");
 
 let buildServer: ServerModule["buildServer"];

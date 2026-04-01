@@ -32,6 +32,7 @@ function createValidEnvironment(
     OPENROUTER_DEFAULT_MAX_TOKENS: "450",
     CARTESIA_API_KEY: "cartesia-key",
     ELEVENLABS_API_KEY: "elevenlabs-key",
+    MISTRAL_API_KEY: "mistral-key",
     SENTRY_DSN: "https://public@example.ingest.sentry.io/1",
   };
 
@@ -76,7 +77,6 @@ describe("agent env", () => {
       DATABASE_URL: "  postgresql://postgres:secret@example.com:5432/postgres  ",
       OPENROUTER_DEFAULT_MODEL: undefined,
       OPENROUTER_DEFAULT_MAX_TOKENS: undefined,
-      SENTRY_DSN: "   ",
     });
     const module = await importEnvModule(environment);
 
@@ -86,7 +86,7 @@ describe("agent env", () => {
       OPENROUTER_DEFAULT_MAX_TOKENS: module.DEFAULT_OPENROUTER_MAX_TOKENS,
       OPENROUTER_REQUEST_TIMEOUT_MS: module.DEFAULT_OPENROUTER_REQUEST_TIMEOUT_MS,
       AGENT_TURN_DEADLINE_MS: module.DEFAULT_AGENT_TURN_DEADLINE_MS,
-      SENTRY_DSN: undefined,
+      SENTRY_DSN: "https://public@example.ingest.sentry.io/1",
     });
   });
 
@@ -115,16 +115,25 @@ describe("agent env", () => {
   });
 
   /**
-   * Confirms operators can omit Sentry entirely without blocking service boot.
+   * Confirms the agents service fails fast when the required Sentry DSN is
+   * omitted or blank.
    */
-  it("allows SENTRY_DSN to be omitted entirely", async () => {
+  it("requires SENTRY_DSN to be present and non-empty", async () => {
     const module = await importEnvModule();
-    const parsedEnvironment = module.parseAgentEnvironment(
-      createValidEnvironment({
-        SENTRY_DSN: undefined,
-      }),
-    );
+    expect(() =>
+      module.parseAgentEnvironment(
+        createValidEnvironment({
+          SENTRY_DSN: undefined,
+        }),
+      ),
+    ).toThrowError(/SENTRY_DSN/);
 
-    expect(parsedEnvironment).not.toHaveProperty("SENTRY_DSN");
+    expect(() =>
+      module.parseAgentEnvironment(
+        createValidEnvironment({
+          SENTRY_DSN: "   ",
+        }),
+      ),
+    ).toThrowError(/SENTRY_DSN/);
   });
 });

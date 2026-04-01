@@ -23,6 +23,7 @@ import {
 import { createLogger, logger } from "./lib/logger.js";
 import { registerAuthDecorators } from "./middleware/auth.js";
 import { closeRedis, connectRedis, pingRedis } from "./lib/redis.js";
+import { captureException, flushSentry } from "./lib/sentry.js";
 import { adminRoutes } from "./routes/admin.js";
 import { agentsRoutes } from "./routes/agents.js";
 import { roomsRoutes } from "./routes/rooms.js";
@@ -31,6 +32,8 @@ import { webhookRoutes } from "./routes/webhooks.js";
 const serverLogger = createLogger({ component: "server" });
 
 let registeredSignalHandlers = false;
+let registeredProcessErrorHandlers = false;
+let shutdownPromise: Promise<void> | null = null;
 
 /**
  * Successful health check response shape for platform probes.
@@ -122,6 +125,17 @@ export function buildServer() {
     };
 
     if (normalizedError.statusCode >= 500) {
+      captureException(error, {
+        tags: {
+          code: normalizedError.code,
+          statusCode: String(normalizedError.statusCode),
+        },
+        extra: {
+          method: request.method,
+          requestId: String(request.id),
+          url: request.url,
+        },
+      });
       request.log.error(logPayload, "Unhandled request error.");
     } else {
       request.log.warn(logPayload, "Handled request error.");
@@ -145,6 +159,50 @@ export function buildServer() {
  */
 type ApiServer = ReturnType<typeof buildServer>;
 
+/**
+ * Executes the shared API shutdown path exactly once regardless of which
+ * lifecycle event initiated termination.
+ *
+ * @param app - The running Fastify instance.
+ * @param context - Structured metadata describing why shutdown began.
+ * @returns A promise that settles when resource cleanup and Sentry flushes finish.
+ */
+async function shutdownApi(
+  app: ApiServer,
+  context: {
+    cause: "fatal_error" | "signal" | "startup_failure";
+    signal?: NodeJS.Signals;
+    error?: Error;
+    source?: "uncaughtException" | "unhandledRejection";
+  },
+): Promise<void> {
+  if (!shutdownPromise) {
+    shutdownPromise = (async () => {
+      serverLogger.info(
+        {
+          cause: context.cause,
+          errorName: context.error?.name,
+          signal: context.signal,
+          source: context.source,
+        },
+        "API shutdown initiated.",
+      );
+
+      await Promise.allSettled([
+        app.close(),
+        closeDatabasePool(),
+        closeRedis(),
+      ]);
+
+      await flushSentry();
+    })().finally(() => {
+      shutdownPromise = null;
+    });
+  }
+
+  await shutdownPromise;
+}
+
 function registerSignalHandlers(app: ApiServer): void {
   if (registeredSignalHandlers) {
     return;
@@ -152,29 +210,20 @@ function registerSignalHandlers(app: ApiServer): void {
 
   registeredSignalHandlers = true;
 
-  let shutdownPromise: Promise<void> | null = null;
-
   const shutdown = async (signal: NodeJS.Signals) => {
-    if (shutdownPromise) {
-      return shutdownPromise;
+    serverLogger.info({ signal }, "Received shutdown signal.");
+
+    try {
+      await shutdownApi(app, {
+        cause: "signal",
+        signal,
+      });
+      serverLogger.info({ signal }, "API shutdown complete.");
+      process.exitCode = 0;
+    } catch (error) {
+      serverLogger.error({ err: error, signal }, "API shutdown failed.");
+      process.exitCode = 1;
     }
-
-    shutdownPromise = (async () => {
-      serverLogger.info({ signal }, "Received shutdown signal.");
-
-      try {
-        await app.close();
-        await closeDatabasePool();
-        await closeRedis();
-        serverLogger.info({ signal }, "API shutdown complete.");
-        process.exitCode = 0;
-      } catch (error) {
-        serverLogger.error({ err: error, signal }, "API shutdown failed.");
-        process.exitCode = 1;
-      }
-    })();
-
-    await shutdownPromise;
   };
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -182,6 +231,71 @@ function registerSignalHandlers(app: ApiServer): void {
       void shutdown(signal);
     });
   }
+}
+
+/**
+ * Registers one-time crash handlers for fatal process-level failures that sit
+ * outside Fastify's request lifecycle.
+ *
+ * @param app - The running Fastify instance.
+ */
+function registerProcessErrorHandlers(app: ApiServer): void {
+  if (registeredProcessErrorHandlers) {
+    return;
+  }
+
+  registeredProcessErrorHandlers = true;
+
+  const handleFatalProcessError = async (
+    source: "uncaughtException" | "unhandledRejection",
+    error: unknown,
+  ) => {
+    const normalizedError = captureException(error, {
+      tags: {
+        source,
+      },
+      extra: {
+        processUptimeSeconds: Number(process.uptime().toFixed(3)),
+      },
+    });
+
+    serverLogger.fatal(
+      {
+        err: normalizedError,
+        source,
+      },
+      "API process encountered a fatal error.",
+    );
+
+    try {
+      await shutdownApi(app, {
+        cause: "fatal_error",
+        error: normalizedError,
+        source,
+      });
+    } catch (shutdownError) {
+      serverLogger.error(
+        {
+          err: shutdownError,
+          source,
+        },
+        "API fatal-error shutdown failed.",
+      );
+    }
+
+  };
+
+  process.once("uncaughtException", (error) => {
+    void handleFatalProcessError("uncaughtException", error).finally(() => {
+      process.exit(1);
+    });
+  });
+
+  process.once("unhandledRejection", (reason) => {
+    void handleFatalProcessError("unhandledRejection", reason).finally(() => {
+      process.exit(1);
+    });
+  });
 }
 
 /**
@@ -203,6 +317,7 @@ export async function startServer(): Promise<ApiServer> {
     });
 
     registerSignalHandlers(app);
+    registerProcessErrorHandlers(app);
 
     serverLogger.info(
       {
@@ -215,9 +330,27 @@ export async function startServer(): Promise<ApiServer> {
 
     return app;
   } catch (error) {
-    serverLogger.error({ err: error }, "Failed to start the Murmur API server.");
+    const normalizedError = captureException(error, {
+      tags: {
+        stage: "startup",
+      },
+      extra: {
+        host: env.HOST,
+        port: env.PORT,
+      },
+    });
 
-    await Promise.allSettled([app.close(), closeDatabasePool(), closeRedis()]);
+    serverLogger.error(
+      { err: normalizedError },
+      "Failed to start the Murmur API server.",
+    );
+
+    await shutdownApi(app, {
+      cause: "startup_failure",
+      error: normalizedError,
+    }).catch(async () => {
+      await flushSentry();
+    });
 
     throw error;
   }
@@ -230,6 +363,8 @@ const isDirectExecution =
 if (isDirectExecution) {
   void startServer().catch((error) => {
     serverLogger.fatal({ err: error }, "API process exited during startup.");
-    process.exit(1);
+    void flushSentry().finally(() => {
+      process.exit(1);
+    });
   });
 }

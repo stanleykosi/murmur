@@ -76,6 +76,12 @@ vi.mock("../services/centrifugo.service.js", () => ({
   publishRoomEnded: publishRoomEndedMock,
 }));
 
+vi.mock("../lib/sentry.js", () => ({
+  captureException: (error: unknown) =>
+    error instanceof Error ? error : new Error(String(error)),
+  flushSentry: async () => true,
+}));
+
 type ServerModule = typeof import("../server.js");
 
 let buildServer: ServerModule["buildServer"];
