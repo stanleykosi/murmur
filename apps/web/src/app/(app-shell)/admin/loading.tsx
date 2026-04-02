@@ -19,20 +19,16 @@ export default function AdminLoadingPage() {
         <div className="admin-hero__copy">
           <Skeleton width="8rem" height="0.85rem" borderRadius="999px" />
           <Skeleton width="15rem" height="0.85rem" borderRadius="999px" />
-          <Skeleton width="78%" height="4rem" borderRadius="1.8rem" />
+          <Skeleton width="72%" height="3.4rem" borderRadius="1.4rem" />
           <Skeleton width="100%" height="1rem" borderRadius="999px" />
           <Skeleton width="84%" height="1rem" borderRadius="999px" />
         </div>
 
         <div className="admin-hero__panel">
-          <div className="admin-hero__signal">
-            <Skeleton width="9rem" height="9rem" borderRadius="999px" />
-          </div>
-
           <div className="admin-hero__principles">
-            <Skeleton width="100%" height="4.5rem" borderRadius="1.6rem" />
-            <Skeleton width="100%" height="4.5rem" borderRadius="1.6rem" />
-            <Skeleton width="100%" height="4.5rem" borderRadius="1.6rem" />
+            <Skeleton width="100%" height="4rem" borderRadius="1.1rem" />
+            <Skeleton width="100%" height="4rem" borderRadius="1.1rem" />
+            <Skeleton width="100%" height="4rem" borderRadius="1.1rem" />
           </div>
         </div>
       </section>

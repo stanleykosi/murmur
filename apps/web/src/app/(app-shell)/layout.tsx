@@ -17,7 +17,7 @@ export default function AppShellLayout({
     <div className="site-shell">
       <Header />
       <main className="site-main">
-        <div className="page-container page-shell">{children}</div>
+        <div className="page-container app-shell__content">{children}</div>
       </main>
       <Footer />
     </div>

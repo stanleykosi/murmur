@@ -19,6 +19,7 @@ export default function AuthFrame({
       <div className="auth-frame fade-up">
         <div className="auth-copy">
           <span className="section-label">Live AI audio</span>
+          <p className="auth-copy__eyebrow mono">Account access / lobby entry / room continuity</p>
           <h1>{title}</h1>
           <p className="auth-body">{description}</p>
         </div>

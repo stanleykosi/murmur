@@ -75,6 +75,16 @@ function getHostAgent(room: Room): AgentSummary | null {
 }
 
 /**
+ * Returns whether the room title adds information beyond the topic line.
+ *
+ * @param room - Room payload rendered by the card.
+ * @returns True when the title should be rendered as secondary metadata.
+ */
+function shouldRenderSecondaryTitle(room: Room): boolean {
+  return room.title.trim().toLowerCase() !== room.topic.trim().toLowerCase();
+}
+
+/**
  * Builds the room-level accent style from the host agent's accent color.
  *
  * @param room - Room payload rendered by the card.
@@ -120,6 +130,7 @@ function ArrowIcon() {
 export default function RoomCard({ room }: Readonly<RoomCardProps>) {
   const hostAgent = getHostAgent(room);
   const agentNames = room.agents.map((agent) => agent.name).join(" · ");
+  const showSecondaryTitle = shouldRenderSecondaryTitle(room);
 
   return (
     <Card
@@ -147,19 +158,21 @@ export default function RoomCard({ room }: Readonly<RoomCardProps>) {
         </div>
 
         <div className="room-card__body">
-          <p className="room-card__eyebrow mono">Room / {room.id.slice(0, 8)}</p>
+          <p className="room-card__eyebrow mono">
+            Host / {hostAgent?.name ?? "Murmur"} / {room.agents.length} agents
+          </p>
           <h2 className="room-card__title" data-testid="room-title">
             {room.title}
           </h2>
-          <p
-            className="room-card__topic"
-            data-testid="room-topic"
-            title={room.topic}
-          >
-            {truncateText(room.topic, 140)}
-          </p>
+          {showSecondaryTitle ? (
+            <p className="room-card__topic" data-testid="room-topic" title={room.topic}>
+              {truncateText(room.topic, 140)}
+            </p>
+          ) : null}
           <p className="room-card__host-note">
-            Hosted by {hostAgent?.name ?? "Murmur"}.
+            {room.format === "moderated"
+              ? "Host-led room with clear turn direction."
+              : "Open conversational room with rotating AI voices."}
           </p>
         </div>
 
@@ -192,7 +205,7 @@ export default function RoomCard({ room }: Readonly<RoomCardProps>) {
           <div className="room-card__footer-meta">
             <p className="room-card__agent-summary">{agentNames}</p>
             <span className="room-card__cta">
-              Enter room
+              Join live room
               <ArrowIcon />
             </span>
           </div>

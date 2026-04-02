@@ -32,6 +32,7 @@ import {
 
 import { useToast } from "@/components/ui/Toast";
 import Button from "@/components/ui/Button";
+import SingularityLoader from "@/components/ui/SingularityLoader";
 import {
   ApiClientError,
   joinRoom,
@@ -39,7 +40,7 @@ import {
 } from "@/lib/api";
 import { buildAuthRedirectHref } from "@/lib/auth-redirect";
 import { cn } from "@/lib/utils";
-import type { Room } from "@/types";
+import type { LiveKitRetryState, Room } from "@/types";
 
 import useCentrifugo from "@/hooks/useCentrifugo";
 import useLiveKitRoom from "@/hooks/useLiveKitRoom";
@@ -68,10 +69,13 @@ export interface LiveRoomProps {
  */
 interface StatusPanelProps {
   actions?: ReactNode;
+  busy?: boolean;
   className?: string;
   description: string;
   eyebrow: string;
+  supportingCopy?: ReactNode;
   title: string;
+  visual?: ReactNode;
 }
 
 /**
@@ -132,6 +136,48 @@ function getRuntimeErrorDescription(error: Error): string {
 }
 
 /**
+ * Formats a retry delay for room transport status copy.
+ *
+ * @param delayMs - Delay before the next retry in milliseconds.
+ * @returns A compact seconds string for status messaging.
+ */
+function formatRetryDelay(delayMs: number): string {
+  return `${(delayMs / 1_000).toFixed(1)}s`;
+}
+
+/**
+ * Resolves the supporting transport copy for the current retry phase.
+ *
+ * @param retryState - Current LiveKit retry metadata from the room hook.
+ * @param hasConnectedOnce - Whether the listener has already connected before.
+ * @returns Supporting JSX describing the current transport state.
+ */
+function getTransportSupportingCopy(
+  retryState: LiveKitRetryState,
+  hasConnectedOnce: boolean,
+): ReactNode {
+  if (retryState.phase === "waiting" && retryState.nextRetryDelayMs !== null) {
+    return (
+      <p className="room-live-status__support">
+        Retrying in {formatRetryDelay(retryState.nextRetryDelayMs)}. Attempt{" "}
+        {retryState.attempt} of {retryState.maxAttempts}.
+      </p>
+    );
+  }
+
+  if (retryState.phase === "connecting" && retryState.attempt > 0) {
+    return (
+      <p className="room-live-status__support">
+        {hasConnectedOnce ? "Reconnection" : "Transport"} attempt{" "}
+        {retryState.attempt} of {retryState.maxAttempts}.
+      </p>
+    );
+  }
+
+  return null;
+}
+
+/**
  * Renders the decorative signal glyph used by live-room status states.
  *
  * @returns A lightweight SVG used by auth, loading, and error panels.
@@ -166,23 +212,31 @@ function StatusSignalGlyph() {
  */
 function StatusPanel({
   actions,
+  busy = false,
   className,
   description,
   eyebrow,
+  supportingCopy,
   title,
+  visual,
 }: Readonly<StatusPanelProps>) {
   return (
-    <section className={cn("room-live-status glass-card", className)}>
+    <section className={cn("room-live-status glass-card", className)} aria-busy={busy}>
       <div className="room-live-status__visual" aria-hidden="true">
-        <span className="room-live-status__halo room-live-status__halo--outer" />
-        <span className="room-live-status__halo room-live-status__halo--inner" />
-        <StatusSignalGlyph />
+        {visual ?? (
+          <>
+            <span className="room-live-status__halo room-live-status__halo--outer" />
+            <span className="room-live-status__halo room-live-status__halo--inner" />
+            <StatusSignalGlyph />
+          </>
+        )}
       </div>
 
       <div className="room-live-status__copy">
         <span className="section-label">{eyebrow}</span>
         <h1>{title}</h1>
         <p>{description}</p>
+        {supportingCopy}
       </div>
 
       {actions ? <div className="room-live-status__actions">{actions}</div> : null}
@@ -232,6 +286,7 @@ export default function LiveRoom({
     connectionState,
     disconnect,
     room: liveKitRoom,
+    retryState,
   } = useLiveKitRoom({
     roomId,
     token: livekitToken,
@@ -691,6 +746,21 @@ export default function LiveRoom({
     !isLeaving &&
     (isJoining || connectionState === "connecting" || effectiveError !== null);
 
+  const transportStatusTitle =
+    effectiveError !== null
+      ? "Connection lost"
+      : hasConnectedOnce
+        ? "Restoring live audio"
+        : "Connecting to the live room";
+  const transportStatusDescription =
+    effectiveError !== null
+      ? getRuntimeErrorDescription(effectiveError)
+      : retryState.phase === "waiting"
+        ? "The room is ready. Murmur is waiting briefly before the next audio transport retry."
+        : hasConnectedOnce
+          ? "The room is re-establishing its audio transport so playback can resume."
+          : "Room access is ready. Murmur is bringing the live audio transport online now.";
+
   useEffect(() => {
     if (!showInitialLoadingState || joinError !== null) {
       return;
@@ -773,6 +843,14 @@ export default function LiveRoom({
               ? "Murmur is confirming your session before it requests room access."
               : "Fetching room access and bringing the live audio transport online now."
           }
+          visual={
+            <div className="room-live-status__loader-cluster">
+              <span className="room-live-status__halo room-live-status__halo--outer" />
+              <span className="room-live-status__halo room-live-status__halo--inner" />
+              <SingularityLoader className="room-live-status__loader" />
+            </div>
+          }
+          busy
         />
       </div>
     );
@@ -862,16 +940,19 @@ export default function LiveRoom({
           <StatusPanel
             className="room-live-status--overlay"
             eyebrow={effectiveError === null ? "Live transport" : "Connection problem"}
-            title={
-              effectiveError === null
-                ? "Connecting to the live room"
-                : "Connection lost"
+            title={transportStatusTitle}
+            description={transportStatusDescription}
+            supportingCopy={getTransportSupportingCopy(retryState, hasConnectedOnce)}
+            visual={
+              effectiveError === null ? (
+                <div className="room-live-status__loader-cluster">
+                  <span className="room-live-status__halo room-live-status__halo--outer" />
+                  <span className="room-live-status__halo room-live-status__halo--inner" />
+                  <SingularityLoader className="room-live-status__loader" />
+                </div>
+              ) : undefined
             }
-            description={
-              effectiveError === null
-                ? "The audio transport is still coming online. The room will unlock as soon as LiveKit confirms the session."
-                : getRuntimeErrorDescription(effectiveError)
-            }
+            busy={effectiveError === null}
             actions={
               effectiveError !== null ? (
                 <>

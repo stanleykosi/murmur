@@ -62,6 +62,7 @@ export default function TranscriptPanel({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const hasHydratedRef = useRef(false);
+  const showReconnectBanner = !isConnected && entries.length > 0;
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -116,6 +117,13 @@ export default function TranscriptPanel({
           </span>
         ) : null}
       </header>
+
+      {showReconnectBanner ? (
+        <div className="room-transcript-panel__banner" aria-hidden="true">
+          <span className="room-transcript-panel__banner-dot" aria-hidden="true" />
+          <p>Transcript reconnecting...</p>
+        </div>
+      ) : null}
 
       <div
         ref={viewportRef}

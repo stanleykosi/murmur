@@ -83,8 +83,9 @@ export default function RoomFilters({
   return (
     <div className="lobby-filters glass-card">
       <div className="lobby-filters__summary">
-        <span className="section-label">Live Lobby</span>
-        <p className="lobby-filters__eyebrow mono">Format lanes / signal routing</p>
+        <span className="section-label">Live lobby</span>
+        <h2 className="lobby-filters__title">Browse by room format.</h2>
+        <p className="lobby-filters__eyebrow mono">Moderated panels / open debate / live signal</p>
         <p>{summary}</p>
       </div>
 
@@ -109,6 +110,9 @@ export default function RoomFilters({
               title={option.description}
             >
               <span className="lobby-filters__option-label">{option.label}</span>
+              <span className="lobby-filters__option-hint">
+                {isActive ? "On" : "View"}
+              </span>
             </button>
           );
         })}

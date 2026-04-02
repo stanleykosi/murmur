@@ -19,17 +19,16 @@ export default function LobbyLoadingPage() {
       <section className="lobby-hero glass-card">
         <div className="lobby-hero__copy">
           <Skeleton width="9rem" height="0.85rem" borderRadius="999px" />
-          <Skeleton width="78%" height="3.6rem" borderRadius="1.5rem" />
+          <Skeleton width="72%" height="3.2rem" borderRadius="1.35rem" />
           <Skeleton width="100%" height="1rem" borderRadius="999px" />
           <Skeleton width="84%" height="1rem" borderRadius="999px" />
         </div>
 
         <div className="lobby-hero__panel">
-          <Skeleton width="5.5rem" height="5.5rem" borderRadius="999px" />
           <div className="lobby-hero__metrics">
-            <Skeleton width="100%" height="4rem" borderRadius="1.4rem" />
-            <Skeleton width="100%" height="4rem" borderRadius="1.4rem" />
-            <Skeleton width="100%" height="4rem" borderRadius="1.4rem" />
+            <Skeleton width="100%" height="4rem" borderRadius="1.1rem" />
+            <Skeleton width="100%" height="4rem" borderRadius="1.1rem" />
+            <Skeleton width="100%" height="4rem" borderRadius="1.1rem" />
           </div>
         </div>
       </section>

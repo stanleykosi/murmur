@@ -30,10 +30,16 @@ import {
   getLiveKitServerUrl,
   parseAgentIdFromParticipantIdentity,
 } from "@/lib/livekit";
-import type { ConnectionState } from "@/types";
+import type { ConnectionState, LiveKitRetryState } from "@/types";
 
 const LIVEKIT_RETRY_DELAYS_MS = [0, 500, 1_000, 2_000] as const;
 const LIVEKIT_CONNECT_TIMEOUT_MS = 12_000;
+const INITIAL_RETRY_STATE = {
+  phase: "idle",
+  attempt: 0,
+  maxAttempts: LIVEKIT_RETRY_DELAYS_MS.length,
+  nextRetryDelayMs: null,
+} satisfies LiveKitRetryState;
 
 export interface UseLiveKitRoomOptions {
   roomId: string;
@@ -46,6 +52,7 @@ export interface UseLiveKitRoomReturn {
   connectionState: ConnectionState;
   disconnect: () => void;
   room: Room | null;
+  retryState: LiveKitRetryState;
 }
 
 /**
@@ -386,6 +393,7 @@ export function useLiveKitRoom({
   const [room, setRoom] = useState<Room | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
+  const [retryState, setRetryState] = useState<LiveKitRetryState>(INITIAL_RETRY_STATE);
   const roomRef = useRef<Room | null>(null);
   const roomCleanupRef = useRef<(() => void) | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -418,6 +426,7 @@ export function useLiveKitRoom({
     abortControllerRef.current = null;
     teardownCurrentRoom();
     setConnectionState("disconnected");
+    setRetryState(INITIAL_RETRY_STATE);
   }, []);
 
   const connect = useCallback(async () => {
@@ -437,6 +446,10 @@ export function useLiveKitRoom({
       liveKitUrl = getLiveKitServerUrl();
     } catch (error) {
       setConnectionState("error");
+      setRetryState({
+        ...INITIAL_RETRY_STATE,
+        phase: "failed",
+      });
       throw error;
     }
     const abortController = new AbortController();
@@ -444,10 +457,26 @@ export function useLiveKitRoom({
     abortControllerRef.current = abortController;
     setConnectionState("connecting");
     setActiveSpeakerId(null);
+    setRetryState({
+      ...INITIAL_RETRY_STATE,
+      phase: "connecting",
+      attempt: 1,
+    });
 
     let lastError: unknown = null;
 
-    for (const delayMs of LIVEKIT_RETRY_DELAYS_MS) {
+    for (const [attemptIndex, delayMs] of LIVEKIT_RETRY_DELAYS_MS.entries()) {
+      const attempt = attemptIndex + 1;
+
+      if (delayMs > 0) {
+        setRetryState({
+          ...INITIAL_RETRY_STATE,
+          phase: "waiting",
+          attempt,
+          nextRetryDelayMs: delayMs,
+        });
+      }
+
       try {
         await waitForDelay(delayMs, abortController.signal);
       } catch (error) {
@@ -461,6 +490,12 @@ export function useLiveKitRoom({
       if (abortController.signal.aborted || operationIdRef.current !== operationId) {
         return;
       }
+
+      setRetryState({
+        ...INITIAL_RETRY_STATE,
+        phase: "connecting",
+        attempt,
+      });
 
       const nextRoom = createLiveKitRoom();
       const detachRoomObservers = attachRoomObservers(
@@ -498,6 +533,7 @@ export function useLiveKitRoom({
         setRoom(nextRoom);
         setConnectionState(mapLiveKitState(nextRoom.state));
         setActiveSpeakerId(getActiveSpeakerId(nextRoom));
+        setRetryState(INITIAL_RETRY_STATE);
         void nextRoom.startAudio().catch(() => undefined);
         return;
       } catch (error) {
@@ -525,6 +561,11 @@ export function useLiveKitRoom({
     setConnectionState("error");
     setActiveSpeakerId(null);
     setRoom(null);
+    setRetryState({
+      ...INITIAL_RETRY_STATE,
+      phase: "failed",
+      attempt: LIVEKIT_RETRY_DELAYS_MS.length,
+    });
 
     throw lastError instanceof Error
       ? lastError
@@ -543,6 +584,7 @@ export function useLiveKitRoom({
     connectionState,
     disconnect,
     room,
+    retryState,
   };
 }
 

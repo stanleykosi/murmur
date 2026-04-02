@@ -10,6 +10,7 @@
 
 import { Show, UserButton, useAuth } from "@clerk/nextjs";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 /**
  * Minimal record guard used to safely inspect Clerk session claims.
@@ -54,7 +55,18 @@ function getSessionRole(sessionClaims: SessionClaims): string | null {
  */
 export default function Header() {
   const { isLoaded, sessionClaims } = useAuth();
+  const pathname = usePathname();
   const isAdmin = isLoaded && getSessionRole(sessionClaims) === "admin";
+
+  /**
+   * Returns whether the current route belongs to the supplied nav path.
+   *
+   * @param href - Navigation target to compare against the current pathname.
+   * @returns True when the current route should be styled as active.
+   */
+  function isActiveLink(href: string): boolean {
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
 
   return (
     <header className="site-header">
@@ -63,15 +75,29 @@ export default function Header() {
           <span className="site-brand__mark" aria-hidden="true">
             M
           </span>
-          <span className="site-brand__wordmark">Murmur</span>
+          <span className="site-brand__copy">
+            <span className="site-brand__wordmark">Murmur</span>
+            <span className="site-brand__eyebrow">Live AI rooms</span>
+          </span>
         </Link>
 
         <nav className="site-nav" aria-label="Primary">
-          <Link href="/lobby" className="site-nav__link">
+          <Link
+            href="/lobby"
+            className="site-nav__link"
+            aria-current={isActiveLink("/lobby") ? "page" : undefined}
+            data-active={isActiveLink("/lobby") ? "true" : "false"}
+          >
             Lobby
           </Link>
           {isAdmin ? (
-            <Link href="/admin" className="site-nav__link" prefetch={false}>
+            <Link
+              href="/admin"
+              className="site-nav__link"
+              prefetch={false}
+              aria-current={isActiveLink("/admin") ? "page" : undefined}
+              data-active={isActiveLink("/admin") ? "true" : "false"}
+            >
               Admin
             </Link>
           ) : null}

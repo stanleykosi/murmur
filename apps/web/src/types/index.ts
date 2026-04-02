@@ -20,6 +20,20 @@ export type ConnectionState =
   | "error";
 
 /**
+ * Connection retry metadata exposed by the LiveKit room hook.
+ *
+ * The room UI uses this to distinguish an in-flight connection attempt from a
+ * scheduled retry delay, keeping the transport overlay truthful without
+ * introducing duplicate retry bookkeeping in the component tree.
+ */
+export interface LiveKitRetryState {
+  phase: "idle" | "waiting" | "connecting" | "failed";
+  attempt: number;
+  maxAttempts: number;
+  nextRetryDelayMs: number | null;
+}
+
+/**
  * Minimal authentication contract required by protected frontend API calls.
  *
  * Client and server components can satisfy this either with a Clerk `getToken`

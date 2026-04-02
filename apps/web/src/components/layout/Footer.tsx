@@ -17,11 +17,13 @@ export default function Footer() {
     <footer className="site-footer">
       <div className="page-container site-footer__inner">
         <div className="site-footer__meta">
-          <span className="section-label">The Fluid Architect</span>
+          <span className="section-label">Operational audio</span>
+          <p className="site-footer__product">Murmur</p>
           <p>&copy; {currentYear} Murmur</p>
         </div>
         <p className="site-footer__tagline">
-          Live AI listening rooms framed in signal and shadow.
+          Live AI listening rooms with clear entry, truthful state, and calm
+          production surfaces.
         </p>
       </div>
     </footer>
