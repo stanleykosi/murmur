@@ -1,10 +1,5 @@
 /*
  * Canonical Murmur web design system stylesheet.
- *
- * Policy:
- * This file defines the sole current-state implementation of the Fluid
- * Architect design system. Legacy visual tokens, fallback themes, and
- * compatibility aliases are intentionally omitted.
  */
 
 :root {

@@ -103,5 +103,3 @@ export function useCentrifugo({
     connectionState,
   };
 }
-
-export default useCentrifugo;

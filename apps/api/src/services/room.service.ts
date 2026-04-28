@@ -13,6 +13,8 @@ import type {
   AdminAgentSummary,
   AdminRoom,
   AgentSummary,
+  EndRoomResponse,
+  LeaveRoomResponse,
   Room,
   RoomFormat,
   RoomStatus,
@@ -60,22 +62,6 @@ export interface CreateRoomInput {
   status?: Extract<RoomStatus, "live" | "scheduled">;
   title: string;
   topic: string;
-}
-
-/**
- * Response payload returned after a successful leave operation.
- */
-export interface LeaveRoomResult {
-  listenerCount: number;
-  roomId: string;
-}
-
-/**
- * Result returned after ending a room through the admin control flow.
- */
-export interface EndRoomResult {
-  alreadyEnded: boolean;
-  room: Room;
 }
 
 /**
@@ -627,7 +613,7 @@ export async function createRoom(input: CreateRoomInput): Promise<Room> {
  * @returns The ended room payload plus an idempotency flag.
  * @throws {NotFoundError} When the room does not exist.
  */
-export async function endRoom(roomId: string): Promise<EndRoomResult> {
+export async function endRoom(roomId: string): Promise<EndRoomResponse> {
   const roomRecord = await getRoomRecordWithAgents(roomId);
 
   if (roomRecord.status === "ended") {
@@ -752,7 +738,7 @@ export async function joinRoom(
 export async function leaveRoom(
   roomId: string,
   clerkUserId: string,
-): Promise<LeaveRoomResult> {
+): Promise<LeaveRoomResponse> {
   await getRoomRecordWithAgents(roomId);
 
   const userRecord = await getPersistedUserByClerkId(clerkUserId);

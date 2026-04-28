@@ -14,13 +14,16 @@ import type {
   AgentSummary,
   AdminAgentSummary,
   AdminAgentMutationResponse,
+  AdminRoomsResponse,
   AdminRoom,
   ApiAuthContext,
-  ApiErrorShape,
+  ApiErrorResponse,
   EndRoomResponse,
   JoinRoomResponse,
   LeaveRoomResponse,
   Room,
+  RoomDetailsResponse,
+  RoomsListResponse,
   RoomStatus,
 } from "@/types";
 
@@ -39,27 +42,6 @@ interface JsonRequestOptions {
   auth?: ApiAuthContext;
   cache?: RequestCache;
   keepalive?: boolean;
-}
-
-/**
- * `GET /api/rooms` response contract.
- */
-interface RoomsListResponse {
-  rooms: Room[];
-}
-
-/**
- * `GET /api/rooms/:id` response contract.
- */
-interface RoomDetailsResponse {
-  room: Room;
-}
-
-/**
- * `GET /api/admin/rooms` response contract.
- */
-interface AdminRoomsResponse {
-  rooms: AdminRoom[];
 }
 
 /**
@@ -263,7 +245,7 @@ async function parseJsonBody(
  * @param value - Parsed JSON payload to inspect.
  * @returns True when the payload matches the known error shape.
  */
-function isApiErrorShape(value: unknown): value is ApiErrorShape {
+function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   if (!isRecord(value) || !isRecord(value.error)) {
     return false;
   }
@@ -289,7 +271,7 @@ async function throwApiError(response: Response): Promise<never> {
     "The Murmur API returned an empty or non-JSON error response.",
   );
 
-  if (!isApiErrorShape(errorPayload)) {
+  if (!isApiErrorResponse(errorPayload)) {
     throw createApiClientError(
       "The Murmur API returned a malformed error payload.",
       {

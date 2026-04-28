@@ -253,5 +253,3 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 };
-
-export default adminRoutes;

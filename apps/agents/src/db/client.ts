@@ -53,30 +53,25 @@ pool.on("error", (error: Error) => {
  * @throws {Error} When the query fails or returns no rows.
  */
 export async function testDatabaseConnection(): Promise<DatabaseConnectionStatus> {
-  try {
-    const query = `
-      select
-        current_database() as database_name,
-        now()::text as server_time
-    `;
-    const result = await pool.query<{
-      database_name: string;
-      server_time: string;
-    }>(query);
-    const firstRow = result.rows[0];
+  const query = `
+    select
+      current_database() as database_name,
+      now()::text as server_time
+  `;
+  const result = await pool.query<{
+    database_name: string;
+    server_time: string;
+  }>(query);
+  const firstRow = result.rows[0];
 
-    if (!firstRow) {
-      throw new Error("PostgreSQL connectivity check returned no rows.");
-    }
-
-    return {
-      databaseName: firstRow.database_name,
-      serverTime: firstRow.server_time,
-    };
-  } catch (error) {
-    databaseLogger.error({ err: error }, "Failed to verify PostgreSQL connectivity.");
-    throw error;
+  if (!firstRow) {
+    throw new Error("PostgreSQL connectivity check returned no rows.");
   }
+
+  return {
+    databaseName: firstRow.database_name,
+    serverTime: firstRow.server_time,
+  };
 }
 
 /**

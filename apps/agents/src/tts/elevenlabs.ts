@@ -9,7 +9,7 @@
 import type { Logger } from "pino";
 
 import { env } from "../config/env.js";
-import type { TTSProvider } from "./provider.js";
+import type { TTSProvider } from "./types.js";
 import {
   createTtsLogger,
   getErrorStatusCode,

@@ -1,5 +1,5 @@
 /**
- * Skeleton placeholder grid for the Murmur lobby.
+ * Loading grid for the Murmur lobby.
  *
  * The real room grid is client-rendered so it can own local filter state. This
  * server-safe skeleton keeps route loading states and suspense fallbacks
@@ -19,7 +19,7 @@ export interface RoomGridSkeletonProps {
 /**
  * Creates the stable iteration indices used by the loading grid.
  *
- * @param count - Number of placeholder cards to render.
+ * @param count - Number of loading cards to render.
  * @returns A deterministic index array.
  */
 function buildIndices(count: number): number[] {

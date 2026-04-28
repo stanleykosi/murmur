@@ -231,5 +231,3 @@ export function useRoomPresence({
     listenerCount,
   };
 }
-
-export default useRoomPresence;

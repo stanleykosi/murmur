@@ -14,7 +14,14 @@ import {
   type TranscriptEvent,
 } from "@murmur/shared";
 import { voice } from "@livekit/agents";
-import { AudioFrame, AudioResampler, Room } from "@livekit/rtc-node";
+import {
+  AudioFrame,
+  AudioResampler,
+  Room,
+  type LocalTrack,
+  type LocalTrackPublication,
+  type TrackPublishOptions,
+} from "@livekit/rtc-node";
 import { EventEmitter } from "node:events";
 import { ReadableStream } from "node:stream/web";
 
@@ -117,7 +124,7 @@ export interface RunnerFloorController {
  * Minimal LiveKit speech handle surface required by the runner bridge.
  */
 export interface SpeechHandleLike {
-  waitForPlayout(): Promise<unknown>;
+  waitForPlayout(): Promise<void>;
 }
 
 /**
@@ -137,12 +144,12 @@ export interface AgentSessionLike {
     agent: voice.Agent;
   }): Promise<void>;
   input: {
-    audio: unknown | null;
+    audio: voice.AgentSession["input"]["audio"];
     setAudioEnabled(enabled: boolean): void;
   };
   output: {
-    audio: unknown | null;
-    transcription: unknown | null;
+    audio: voice.AgentSession["output"]["audio"];
+    transcription: voice.AgentSession["output"]["transcription"];
     setTranscriptionEnabled(enabled: boolean): void;
   };
 }
@@ -175,8 +182,11 @@ export interface LiveKitRoomLike {
   ): Promise<void>;
   disconnect(): Promise<void>;
   localParticipant?: {
-    publishTrack(track: unknown, options?: unknown): Promise<unknown>;
-    unpublishTrack(trackSid: string): Promise<unknown>;
+    publishTrack(
+      track: LocalTrack,
+      options: TrackPublishOptions,
+    ): Promise<LocalTrackPublication>;
+    unpublishTrack(trackSid: string): Promise<void>;
   };
 }
 
@@ -301,6 +311,15 @@ export type AgentRunnerEventName =
   | "turnDeadlineMissed"
   | "error"
   | "stopped";
+
+interface AgentRunnerEvents {
+  ready: [payload: AgentRunnerReadyPayload];
+  turnReadyForPlayback: [payload: TurnReadyForPlaybackInput];
+  turnCompleted: [payload: AgentRunnerTurnCompletedPayload];
+  turnDeadlineMissed: [payload: AgentRunnerTurnDeadlineMissedPayload];
+  error: [error: Error];
+  stopped: [payload: AgentRunnerStoppedPayload];
+}
 
 interface PreparedTurn {
   audioBuffer: Buffer;
@@ -611,7 +630,7 @@ export function createRunnerSessionBridge(
 /**
  * Event-driven runner for one agent in one room.
  */
-export class AgentRunner extends EventEmitter {
+export class AgentRunner extends EventEmitter<AgentRunnerEvents> {
   private readonly agent: AgentRuntimeProfile;
 
   private readonly baseLLMProvider: LLMProvider;
@@ -719,59 +738,6 @@ export class AgentRunner extends EventEmitter {
       });
   }
 
-  public override on(
-    eventName: "turnReadyForPlayback",
-    listener: (payload: TurnReadyForPlaybackInput) => void,
-  ): this;
-  public override on(
-    eventName: "ready",
-    listener: (payload: AgentRunnerReadyPayload) => void,
-  ): this;
-  public override on(
-    eventName: "turnCompleted",
-    listener: (payload: AgentRunnerTurnCompletedPayload) => void,
-  ): this;
-  public override on(
-    eventName: "turnDeadlineMissed",
-    listener: (payload: AgentRunnerTurnDeadlineMissedPayload) => void,
-  ): this;
-  public override on(eventName: "error", listener: (error: Error) => void): this;
-  public override on(
-    eventName: "stopped",
-    listener: (payload: AgentRunnerStoppedPayload) => void,
-  ): this;
-  public override on(
-    eventName: string | symbol,
-    listener: (...args: any[]) => void,
-  ): this {
-    return super.on(eventName, listener);
-  }
-
-  public override emit(
-    eventName: "turnReadyForPlayback",
-    payload: TurnReadyForPlaybackInput,
-  ): boolean;
-  public override emit(
-    eventName: "ready",
-    payload: AgentRunnerReadyPayload,
-  ): boolean;
-  public override emit(
-    eventName: "turnCompleted",
-    payload: AgentRunnerTurnCompletedPayload,
-  ): boolean;
-  public override emit(
-    eventName: "turnDeadlineMissed",
-    payload: AgentRunnerTurnDeadlineMissedPayload,
-  ): boolean;
-  public override emit(eventName: "error", error: Error): boolean;
-  public override emit(
-    eventName: "stopped",
-    payload: AgentRunnerStoppedPayload,
-  ): boolean;
-  public override emit(eventName: string | symbol, ...args: any[]): boolean {
-    return super.emit(eventName, ...args);
-  }
-
   /**
    * Returns the runner's resolved runtime profile.
    */
@@ -860,7 +826,7 @@ export class AgentRunner extends EventEmitter {
       const sessionFactory = this.dependencies.createSession ?? (() => new voice.AgentSession({
         preemptiveGeneration: false,
         userAwayTimeout: null,
-      }) as unknown as AgentSessionLike);
+      }));
       const audioOutputFactory = this.dependencies.createAudioOutput
         ?? ((room) => new RoomAudioOutput(room as Room));
       const vadFactory = this.dependencies.createVadDetector

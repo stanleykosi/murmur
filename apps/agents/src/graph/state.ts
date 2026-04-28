@@ -2,9 +2,9 @@
  * Shared graph-state contracts for the Murmur agent conversation loop.
  *
  * This module defines the canonical LangGraph state, node names, and injected
- * runtime bindings used by Step 30's graph-factory implementation. The graph is
- * intentionally runner-agnostic: callers provide the current room/session
- * bridges and side effects instead of the graph owning process lifecycle.
+ * runtime bindings. The graph is intentionally runner-agnostic: callers provide
+ * the current room/session bridges and side effects instead of the graph owning
+ * process lifecycle.
  */
 
 import { Annotation } from "@langchain/langgraph";

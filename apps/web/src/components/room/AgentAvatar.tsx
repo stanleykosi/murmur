@@ -1,9 +1,5 @@
 /**
- * Premium agent avatar presentation for the Murmur live room stage.
- *
- * This component is intentionally image-led and cinematic, carrying the same
- * editorial identity and material depth established by the landing page into
- * the real-time listening interface.
+ * Agent avatar presentation for the Murmur live room stage.
  */
 
 import Image from "next/image";
@@ -91,7 +87,7 @@ function getAgentAccentStyle(accentColor: string): AgentAccentStyle {
 }
 
 /**
- * Renders the premium live-room avatar treatment for a single agent.
+ * Renders the live-room avatar treatment for a single agent.
  *
  * @param props - Identity, state, and sizing props for the stage avatar.
  * @returns A styled avatar figure with optional host and speaking treatments.

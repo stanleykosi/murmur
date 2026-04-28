@@ -2,8 +2,7 @@
  * Local personality-config facade for the Murmur agent orchestrator.
  *
  * The orchestrator consumes the canonical house-agent definitions from
- * `@murmur/shared` via this workspace-local module so future agent runtime code
- * can use a stable import path without re-defining the personalities.
+ * `@murmur/shared` through this workspace-local import path.
  */
 
 export {

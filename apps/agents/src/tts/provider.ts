@@ -11,20 +11,8 @@ import type { TtsProvider } from "@murmur/shared";
 import { CartesiaTTSProvider } from "./cartesia.js";
 import { ElevenLabsTTSProvider } from "./elevenlabs.js";
 import { MistralTTSProvider } from "./mistral.js";
-
-/**
- * Minimal interface every Murmur TTS backend must satisfy.
- */
-export interface TTSProvider {
-  /**
-   * Synthesizes the supplied text into raw PCM audio bytes.
-   *
-   * @param text - Text content that should be spoken by the provider voice.
-   * @param voiceId - Provider-specific voice identifier.
-   * @returns A buffer containing 24 kHz PCM audio bytes.
-   */
-  synthesize(text: string, voiceId: string): Promise<Buffer>;
-}
+export type { TTSProvider } from "./types.js";
+import type { TTSProvider } from "./types.js";
 
 /**
  * Creates a canonical Murmur TTS provider for the requested backend.

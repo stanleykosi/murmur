@@ -7,18 +7,7 @@
  * consistently as the API surface grows.
  */
 
-/**
- * Serializable error payload returned by the API.
- */
-export interface SerializedErrorResponse {
-  error: {
-    code: string;
-    message: string;
-    statusCode: number;
-    requestId: string;
-    details?: unknown;
-  };
-}
+import type { ApiErrorResponse } from "@murmur/shared";
 
 /**
  * Construction options for application-specific error instances.
@@ -152,12 +141,12 @@ export function isAppError(error: unknown): error is AppError {
 export function serializeErrorResponse(
   error: unknown,
   requestId: string,
-): SerializedErrorResponse {
+): ApiErrorResponse {
   const normalizedError = isAppError(error)
     ? error
     : new InternalServerError("Internal server error.", undefined, error);
 
-  const response: SerializedErrorResponse = {
+  const response: ApiErrorResponse = {
     error: {
       code: normalizedError.code,
       message: normalizedError.expose ? normalizedError.message : "Internal server error.",

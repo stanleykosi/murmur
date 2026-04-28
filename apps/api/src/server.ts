@@ -1,10 +1,9 @@
 /**
  * Fastify bootstrap for the Murmur API service.
  *
- * This file wires together the API runtime scaffold: CORS, health checks,
- * structured error responses, Redis/database readiness checks, graceful
- * shutdown, and the canonical route registration for rooms, agents, admin
- * controls, and Clerk webhooks.
+ * This file wires together CORS, health checks, structured error responses,
+ * Redis/database readiness checks, graceful shutdown, and route registration
+ * for rooms, agents, admin controls, and Clerk webhooks.
  */
 
 import cors from "@fastify/cors";

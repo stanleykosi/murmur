@@ -1,9 +1,5 @@
 /**
- * Premium stage layout for the Murmur live room experience.
- *
- * The stage keeps the host optically central, participants balanced around the
- * broadcast core, and speaking state visually legible without pulling in any of
- * the room-assembly concerns scheduled for later steps.
+ * Stage layout for the Murmur live room experience.
  */
 
 import { cn } from "@/lib/utils";

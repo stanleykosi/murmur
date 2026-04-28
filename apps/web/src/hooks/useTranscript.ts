@@ -254,5 +254,3 @@ export function useTranscript({
     isConnected,
   };
 }
-
-export default useTranscript;

@@ -1,9 +1,8 @@
 /**
  * Canonical Sentry client bootstrap for the Murmur web application.
  *
- * Next.js 16 + Turbopack prefers `instrumentation-client.ts` over the legacy
- * `sentry.client.config.ts` entrypoint, so browser errors and navigation
- * traces are initialized here.
+ * Browser errors and navigation traces are initialized through Next.js'
+ * `instrumentation-client.ts` entrypoint.
  */
 
 import * as Sentry from "@sentry/nextjs";

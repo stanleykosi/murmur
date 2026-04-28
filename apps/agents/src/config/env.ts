@@ -1,10 +1,9 @@
 /**
- * Runtime environment validation for the Murmur agent orchestrator scaffold.
+ * Runtime environment validation for the Murmur agent orchestrator.
  *
  * This module is the single source of truth for agent-service configuration. It
- * loads process environment variables, validates the Step 26 contract with
- * fail-fast diagnostics, and exports a parsed object for the rest of the
- * workspace to consume.
+ * loads process environment variables, validates them with fail-fast
+ * diagnostics, and exports a parsed object for the rest of the workspace.
  */
 
 import "dotenv/config";
@@ -12,17 +11,17 @@ import "dotenv/config";
 import { z } from "zod";
 
 /**
- * Canonical fallback model for OpenRouter-backed agent generation.
+ * Default model for OpenRouter-backed agent generation.
  */
 export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o";
 
 /**
- * Canonical fallback token budget for a single generated room turn.
+ * Default token budget for a single generated room turn.
  */
 export const DEFAULT_OPENROUTER_MAX_TOKENS = 300;
 
 /**
- * Canonical fallback timeout for one OpenRouter request.
+ * Default timeout for one OpenRouter request.
  */
 export const DEFAULT_OPENROUTER_REQUEST_TIMEOUT_MS = 60_000;
 
@@ -107,7 +106,7 @@ export function optionalUrl(
  * directly without repeating coercion logic.
  *
  * @param label - Human-readable variable name used in validation messages.
- * @param defaultValue - Numeric fallback applied when the variable is omitted.
+ * @param defaultValue - Numeric default applied when the variable is omitted.
  * @returns A Zod schema that yields a validated positive integer.
  */
 export function optionalPositiveInteger(

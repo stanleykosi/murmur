@@ -2,10 +2,6 @@
 
 /**
  * Sticky live-room header for the Murmur listening experience.
- *
- * The header keeps the room identity, audience pulse, and leave action visible
- * while listeners move through the stage and transcript, giving the room page
- * a clear control anchor before the full live-room assembly lands.
  */
 
 import Badge from "@/components/ui/Badge";

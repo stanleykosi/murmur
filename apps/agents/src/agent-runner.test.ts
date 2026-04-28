@@ -11,6 +11,7 @@ import { EventEmitter } from "node:events";
 
 import type { AgentRuntimeProfile } from "./runtime/agent-profile.js";
 import type { LLMGenerationOptions } from "./llm/provider.js";
+import type { SessionAudioOutputLike } from "./agent-runner.js";
 import { TranscriptBuffer } from "./runtime/transcript-buffer.js";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -264,7 +265,7 @@ function createRunnerFixture(
       setAudioEnabled: vi.fn(() => undefined),
     },
     output: {
-      audio: null as unknown,
+      audio: null,
       transcription: { attached: true },
       setTranscriptionEnabled: vi.fn(() => undefined),
     },
@@ -694,7 +695,7 @@ describe("AgentRunner", () => {
       resolvePlayout = resolve;
     });
     const playbackStartedListeners = new Set<() => void>();
-    const audioOutput = {
+    const audioOutput: SessionAudioOutputLike = {
       sampleRate: 24_000,
       start: vi.fn(async () => undefined),
       close: vi.fn(async () => undefined),
@@ -719,10 +720,10 @@ describe("AgentRunner", () => {
 
         return audioOutput;
       }),
-    } as unknown as FakeAudioOutput;
+    };
     const bridge = module.createRunnerSessionBridge({
       vad: vadDetector,
-      audioOutput: audioOutput as never,
+      audioOutput,
       timeoutMs: 500,
     });
     let settled = false;
@@ -767,7 +768,7 @@ describe("AgentRunner", () => {
     const module = await importAgentRunnerModule();
     const vadDetector = new FakeVADDetector();
     const playbackStartedListeners = new Set<() => void>();
-    const audioOutput = {
+    const audioOutput: SessionAudioOutputLike = {
       sampleRate: 24_000,
       start: vi.fn(async () => undefined),
       close: vi.fn(async () => undefined),
@@ -792,10 +793,10 @@ describe("AgentRunner", () => {
 
         return audioOutput;
       }),
-    } as unknown as FakeAudioOutput;
+    };
     const bridge = module.createRunnerSessionBridge({
       vad: vadDetector,
-      audioOutput: audioOutput as never,
+      audioOutput,
       timeoutMs: 500,
     });
     const longPcmAudio = Buffer.alloc(96_000, 0);

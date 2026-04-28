@@ -1,7 +1,7 @@
 /**
  * Unit tests for the Murmur agent workspace environment validation helpers.
  *
- * These tests pin the Step 26 configuration contract so the scaffold fails fast
+ * These tests pin the configuration contract so the agent service fails fast
  * with useful diagnostics while remaining easy to configure in development.
  */
 
@@ -14,7 +14,7 @@ const ORIGINAL_ENV = { ...process.env };
  * isolation. Individual tests override keys to probe specific behaviors.
  *
  * @param overrides - Optional environment values to replace or remove.
- * @returns A process-env object suitable for the scaffold env parser.
+ * @returns A process-env object suitable for the agent env parser.
  */
 function createValidEnvironment(
   overrides: Record<string, string | undefined> = {},

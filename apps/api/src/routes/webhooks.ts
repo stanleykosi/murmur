@@ -172,5 +172,3 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 };
-
-export default webhookRoutes;

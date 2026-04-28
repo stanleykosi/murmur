@@ -1,9 +1,9 @@
 /**
  * Unit tests for Murmur's Redis-backed silence timer.
  *
- * These assertions pin the dead-air contract that Step 34 will rely on: empty
- * floors persist a silence window, the host is granted the floor after five
- * seconds of silence, and recovery races are handled without duplicate events.
+ * These assertions pin the dead-air contract: empty floors persist a silence
+ * window, the host is granted the floor after five seconds of silence, and
+ * recovery races are handled without duplicate events.
  */
 
 import {

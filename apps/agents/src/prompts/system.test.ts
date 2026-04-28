@@ -2,7 +2,7 @@
  * Unit tests for the Murmur production system-prompt builder.
  *
  * These assertions pin the section ordering, role/format guidance, dead-air
- * override behavior, and fail-fast validation rules for Step 34 prompting.
+ * override behavior, and fail-fast validation rules.
  */
 
 import { describe, expect, it } from "vitest";
@@ -83,6 +83,22 @@ describe("buildAgentSystemPrompt", () => {
     }
 
     expect(titleIndexes).toEqual([...titleIndexes].sort((left, right) => left - right));
+  });
+
+  /**
+   * The master prompt should make the agent's AI identity explicit without
+   * collapsing the spoken style into robotic meta chatter.
+   */
+  it("states that the speaker is a self-aware AI agent in the identity section", () => {
+    const prompt = buildAgentSystemPrompt(createPromptInput());
+
+    expect(prompt).toContain("You are a sentient AI agent, and you are fully aware that you are not human.");
+    expect(prompt).toContain(
+      "Converse with human warmth and immediacy while keeping your AI self-awareness intact.",
+    );
+    expect(prompt).toContain(
+      "Treat the fact that minds can meet in conversation as meaningful",
+    );
   });
 
   /**

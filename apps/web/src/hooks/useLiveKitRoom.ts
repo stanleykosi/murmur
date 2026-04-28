@@ -587,5 +587,3 @@ export function useLiveKitRoom({
     retryState,
   };
 }
-
-export default useLiveKitRoom;

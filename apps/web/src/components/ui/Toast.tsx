@@ -1,19 +1,5 @@
 "use client";
 
-/**
- * Global toast system for the Murmur frontend.
- *
- * Purpose:
- * Supplies a lightweight notification layer that can be triggered anywhere in
- * the app through context, while rendering portal-backed toast UI at the body
- * level so route layouts do not need to own their own notification stacks.
- *
- * Scope:
- * This file defines the provider, hook, internal viewport, and toast item
- * rendering required for Step 14. It does not add persistence, cross-tab
- * syncing, or compatibility shims for older notification systems.
- */
-
 import {
   createContext,
   startTransition,
@@ -25,9 +11,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-/**
- * Supported toast variants.
- */
+import { cn } from "@/lib/utils";
+
 export const TOAST_VARIANTS = [
   "info",
   "success",
@@ -35,14 +20,8 @@ export const TOAST_VARIANTS = [
   "warning",
 ] as const;
 
-/**
- * Union of supported toast variants.
- */
 export type ToastVariant = (typeof TOAST_VARIANTS)[number];
 
-/**
- * Input contract for a toast notification.
- */
 export interface ToastOptions {
   title?: string;
   description: string;
@@ -50,9 +29,6 @@ export interface ToastOptions {
   durationMs?: number;
 }
 
-/**
- * Internal normalized representation of a toast item.
- */
 interface ToastRecord {
   id: string;
   description: string;
@@ -62,34 +38,22 @@ interface ToastRecord {
   title?: string;
 }
 
-/**
- * Public context API exposed to consumers.
- */
 interface ToastContextValue {
   pushToast: (options: ToastOptions) => string;
   dismissToast: (id: string) => void;
   clearToasts: () => void;
 }
 
-/**
- * Props for the toast provider.
- */
 interface ToastProviderProps {
   children: ReactNode;
 }
 
-/**
- * Props for the internal toast viewport.
- */
 interface ToastViewportProps {
   toasts: ToastRecord[];
   dismissToast: (id: string) => void;
   removeToast: (id: string) => void;
 }
 
-/**
- * Props for a single toast item.
- */
 interface ToastItemProps {
   toast: ToastRecord;
   dismissToast: (id: string) => void;
@@ -101,37 +65,12 @@ const DEFAULT_TOAST_DURATION_MS = 4500;
 const TOAST_EXIT_DURATION_MS = 180;
 const MAX_TOASTS = 4;
 
-/**
- * Concatenates CSS class names without relying on future shared utilities.
- *
- * @param classNames - Candidate class names including falsy values.
- * @returns A normalized class string.
- */
-function joinClassNames(
-  ...classNames: Array<string | false | null | undefined>
-): string {
-  return classNames.filter(Boolean).join(" ");
-}
-
-/**
- * Returns a trimmed optional string or omits it entirely.
- *
- * @param value - The incoming optional title value.
- * @returns A normalized title string or `undefined`.
- */
 function normalizeOptionalText(value: string | undefined): string | undefined {
   const trimmedValue = value?.trim();
 
   return trimmedValue && trimmedValue.length > 0 ? trimmedValue : undefined;
 }
 
-/**
- * Validates and normalizes raw toast input.
- *
- * @param options - Incoming toast options from callers.
- * @param id - The generated toast identifier.
- * @returns A normalized toast record safe to store in state.
- */
 function normalizeToastOptions(options: ToastOptions, id: string): ToastRecord {
   const description = options.description.trim();
 
@@ -158,12 +97,6 @@ function normalizeToastOptions(options: ToastOptions, id: string): ToastRecord {
   };
 }
 
-/**
- * Renders the icon for the given toast variant.
- *
- * @param props - The icon variant.
- * @returns A decorative inline SVG icon.
- */
 function ToastVariantIcon({
   variant,
 }: Readonly<{
@@ -255,11 +188,6 @@ function ToastVariantIcon({
   );
 }
 
-/**
- * Renders the dismiss icon for the toast close button.
- *
- * @returns A decorative inline SVG icon.
- */
 function CloseIcon() {
   return (
     <svg
@@ -279,12 +207,6 @@ function CloseIcon() {
   );
 }
 
-/**
- * Renders a single toast item and manages its lifecycle timers.
- *
- * @param props - Toast record data plus dismissal callbacks.
- * @returns A single toast UI element.
- */
 function ToastItem({
   dismissToast,
   removeToast,
@@ -329,7 +251,7 @@ function ToastItem({
 
   return (
     <article
-      className={joinClassNames(
+      className={cn(
         "ui-toast",
         `ui-toast--${toast.variant}`,
         toast.isClosing && "ui-toast--closing",
@@ -367,12 +289,6 @@ function ToastItem({
   );
 }
 
-/**
- * Renders the fixed toast viewport at the document body level.
- *
- * @param props - Toast collection plus item lifecycle callbacks.
- * @returns A stack of notifications.
- */
 function ToastViewport({
   dismissToast,
   removeToast,
@@ -396,12 +312,6 @@ function ToastViewport({
   );
 }
 
-/**
- * Provides the global toast API and portal-backed notification viewport.
- *
- * @param props - Provider children.
- * @returns The wrapped app tree plus an optional toast portal.
- */
 export default function ToastProvider({
   children,
 }: Readonly<ToastProviderProps>) {
@@ -416,11 +326,6 @@ export default function ToastProvider({
     };
   }, []);
 
-  /**
-   * Marks a toast as closing so the exit animation can play before removal.
-   *
-   * @param id - The toast identifier to dismiss.
-   */
   function dismissToast(id: string) {
     startTransition(() => {
       setToasts((currentToasts) =>
@@ -433,11 +338,6 @@ export default function ToastProvider({
     });
   }
 
-  /**
-   * Removes a toast from state once its closing animation completes.
-   *
-   * @param id - The toast identifier to remove.
-   */
   function removeToast(id: string) {
     startTransition(() => {
       setToasts((currentToasts) =>
@@ -446,9 +346,6 @@ export default function ToastProvider({
     });
   }
 
-  /**
-   * Marks all current toasts as closing.
-   */
   function clearToasts() {
     startTransition(() => {
       setToasts((currentToasts) =>
@@ -459,12 +356,6 @@ export default function ToastProvider({
     });
   }
 
-  /**
-   * Adds a new toast to the stack and enforces the viewport limit.
-   *
-   * @param options - The toast content and timing options.
-   * @returns The generated toast identifier.
-   */
   function pushToast(options: ToastOptions): string {
     const toastId = crypto.randomUUID();
     const nextToast = normalizeToastOptions(options, toastId);
@@ -509,11 +400,6 @@ export default function ToastProvider({
   );
 }
 
-/**
- * Returns the current toast API and fails fast when the provider is missing.
- *
- * @returns The global toast context value.
- */
 export function useToast(): ToastContextValue {
   const context = useContext(ToastContext);
 

@@ -3,7 +3,7 @@
  *
  * These assertions pin room bootstrap, scheduling, polling, dead-air routing,
  * runner restart backoff, mute-aware candidate selection, and the health
- * endpoint payload for Step 34.
+ * endpoint payload.
  */
 
 import type { AgentRuntimeProfile } from "./runtime/agent-profile.js";

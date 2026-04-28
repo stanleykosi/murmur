@@ -67,14 +67,6 @@ function initializeSentry(): void {
 
 initializeSentry();
 
-/**
- * Records one runtime error through the canonical Step 35 Sentry facade.
- *
- * @param logger - Structured logger used for the current subsystem.
- * @param error - Arbitrary thrown value that should be normalized and logged.
- * @param context - Structured metadata about the stage that failed.
- * @returns The normalized `Error` instance for rethrowing or emission.
- */
 export function captureRuntimeError(
   logger: RuntimeErrorLogger,
   error: unknown,

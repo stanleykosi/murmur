@@ -42,10 +42,10 @@ import { buildAuthRedirectHref } from "@/lib/auth-redirect";
 import { cn } from "@/lib/utils";
 import type { LiveKitRetryState, Room } from "@/types";
 
-import useCentrifugo from "@/hooks/useCentrifugo";
-import useLiveKitRoom from "@/hooks/useLiveKitRoom";
-import useRoomPresence from "@/hooks/useRoomPresence";
-import useTranscript from "@/hooks/useTranscript";
+import { useCentrifugo } from "@/hooks/useCentrifugo";
+import { useLiveKitRoom } from "@/hooks/useLiveKitRoom";
+import { useRoomPresence } from "@/hooks/useRoomPresence";
+import { useTranscript } from "@/hooks/useTranscript";
 import AgentStage from "./AgentStage";
 import AudioControls from "./AudioControls";
 import RoomHeader from "./RoomHeader";

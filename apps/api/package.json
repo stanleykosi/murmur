@@ -1,5 +1,5 @@
 {
-  "//": "Workspace manifest for the Murmur Fastify API scaffold.",
+  "//": "Workspace manifest for the Murmur Fastify API service.",
   "name": "api",
   "version": "0.1.0",
   "private": true,

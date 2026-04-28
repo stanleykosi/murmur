@@ -1,9 +1,9 @@
 /**
  * Unit tests for the Murmur agents Sentry helper.
  *
- * These assertions pin the Step 35 runtime-error facade so orchestrator and
- * runner failures keep their room, agent, and stage metadata attached to each
- * captured exception.
+ * These assertions pin the runtime-error facade so orchestrator and runner
+ * failures keep their room, agent, and stage metadata attached to each captured
+ * exception.
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";

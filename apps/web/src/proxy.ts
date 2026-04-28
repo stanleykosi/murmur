@@ -2,8 +2,7 @@
  * Clerk proxy configuration for the Murmur web app.
  *
  * This file enables Clerk request context for App Router server helpers and
- * applies Murmur's canonical admin-route protection policy without introducing
- * alternate auth flows or legacy role fallbacks.
+ * applies Murmur's admin-route protection policy.
  */
 
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";

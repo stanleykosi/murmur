@@ -1,8 +1,8 @@
 /**
  * Unit tests for the Murmur agent LangGraph loop.
  *
- * These assertions pin the Step 30 graph behavior so later runner and floor
- * controller work can integrate against a stable conversation-loop contract.
+ * These assertions pin graph behavior so runner and floor controller work can
+ * integrate against a stable conversation-loop contract.
  */
 
 import type { TranscriptEntry, TranscriptEvent } from "@murmur/shared";

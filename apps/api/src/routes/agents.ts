@@ -2,8 +2,7 @@
  * Fastify agent routes for the Murmur API.
  *
  * This plugin exposes the public read-only agent catalog used by the lobby,
- * live-room UI, and future admin tools that need a stable source of active
- * agent metadata.
+ * live-room UI, and admin tools.
  */
 
 import type { FastifyPluginAsync } from "fastify";
@@ -38,5 +37,3 @@ export const agentsRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 };
-
-export default agentsRoutes;

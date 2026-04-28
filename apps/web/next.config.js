@@ -1,11 +1,3 @@
-/**
- * Next.js configuration for the Murmur web workspace.
- *
- * This scaffold keeps the app bootable and monorepo-aware while deferring
- * product-specific styling, auth wiring, and feature configuration to later
- * implementation steps.
- */
-
 const path = require("node:path");
 const { withSentryConfig } = require("@sentry/nextjs");
 

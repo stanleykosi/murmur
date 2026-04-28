@@ -1,9 +1,9 @@
 /**
  * Unit tests for the Murmur API Sentry helper.
  *
- * These tests pin the canonical Step 35 capture wrapper so request and process
- * failures keep forwarding structured metadata to Sentry without leaking raw
- * SDK usage across the API codebase.
+ * These tests pin the capture wrapper so request and process failures keep
+ * forwarding structured metadata to Sentry without leaking raw SDK usage across
+ * the API codebase.
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";

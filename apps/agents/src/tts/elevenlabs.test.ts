@@ -112,11 +112,11 @@ function createStreamResponse(
 }
 
 /**
- * Creates a logger stub with the methods exercised by the provider.
+ * Creates a test logger with the methods exercised by the provider.
  *
  * @returns A minimal logger implementation compatible with the provider class.
  */
-function createLoggerStub(): Logger {
+function createTestLogger(): Logger {
   return {
     error: vi.fn(),
     info: vi.fn(),
@@ -146,7 +146,7 @@ describe("ElevenLabsTTSProvider", () => {
       );
     const provider = new module.ElevenLabsTTSProvider(
       fetchImplementation,
-      createLoggerStub(),
+      createTestLogger(),
       vi.fn().mockResolvedValue(undefined),
     );
 
@@ -179,7 +179,7 @@ describe("ElevenLabsTTSProvider", () => {
     const fetchImplementation = vi.fn<typeof fetch>();
     const provider = new module.ElevenLabsTTSProvider(
       fetchImplementation,
-      createLoggerStub(),
+      createTestLogger(),
       vi.fn().mockResolvedValue(undefined),
     );
 
@@ -208,7 +208,7 @@ describe("ElevenLabsTTSProvider", () => {
     const delay = vi.fn<SharedModule["DelayImplementation"]>().mockResolvedValue();
     const provider = new module.ElevenLabsTTSProvider(
       fetchImplementation,
-      createLoggerStub(),
+      createTestLogger(),
       delay,
     );
 
@@ -232,7 +232,7 @@ describe("ElevenLabsTTSProvider", () => {
     const delay = vi.fn().mockResolvedValue(undefined);
     const provider = new module.ElevenLabsTTSProvider(
       fetchImplementation,
-      createLoggerStub(),
+      createTestLogger(),
       delay,
     );
 
@@ -254,7 +254,7 @@ describe("ElevenLabsTTSProvider", () => {
       .mockResolvedValue(new Response(null, { status: 200 }));
     const provider = new module.ElevenLabsTTSProvider(
       fetchImplementation,
-      createLoggerStub(),
+      createTestLogger(),
       vi.fn().mockResolvedValue(undefined),
     );
 

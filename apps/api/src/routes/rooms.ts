@@ -6,7 +6,7 @@
  * rooms as an admin, and joining or leaving as an authenticated listener.
  */
 
-import type { Room, RoomStatus } from "@murmur/shared";
+import type { JoinRoomResponse, RoomStatus } from "@murmur/shared";
 import {
   AGENT_ROLES,
   ROOM_FORMATS,
@@ -85,17 +85,6 @@ function getAuthenticatedClerkUserId(request: FastifyRequest): string {
   }
 
   return request.userId;
-}
-
-/**
- * Join response returned to the web client before it connects to LiveKit and
- * Centrifugo.
- */
-interface JoinRoomResponse {
-  agents: Room["agents"];
-  centrifugoToken: string;
-  livekitToken: string;
-  room: Room;
 }
 
 /**
@@ -250,5 +239,3 @@ export const roomsRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 };
-
-export default roomsRoutes;

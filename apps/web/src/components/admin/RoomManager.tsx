@@ -198,8 +198,7 @@ function getOperationErrorDescription(
 }
 
 /**
- * Locates focusable descendants so the end-room dialog can trap focus
- * without introducing a new modal dependency for this step.
+ * Locates focusable descendants so the end-room dialog can trap focus.
  *
  * @param container - Dialog element whose focusable children should be read.
  * @returns A list of currently focusable descendants.

@@ -1,15 +1,3 @@
-/**
- * Reusable card primitive for Murmur.
- *
- * Purpose:
- * Provides a glassmorphism card surface that can render as a static container,
- * an internal link, or an accessible clickable surface.
- *
- * Scope:
- * The card keeps its own light class-name composition logic so Step 14 remains
- * self-contained and does not depend on later shared utility work.
- */
-
 import Link, { type LinkProps } from "next/link";
 import type {
   HTMLAttributeAnchorTarget,
@@ -19,17 +7,13 @@ import type {
   ReactNode,
 } from "react";
 
-/**
- * Shared props used by both link and div card render modes.
- */
+import { cn } from "@/lib/utils";
+
 interface CardBaseProps {
   children: ReactNode;
   className?: string;
 }
 
-/**
- * Card props when the surface should navigate.
- */
 type LinkCardProps = CardBaseProps & {
   href: LinkProps["href"];
   onClick?: MouseEventHandler<HTMLAnchorElement>;
@@ -39,38 +23,14 @@ type LinkCardProps = CardBaseProps & {
   "aria-label"?: string;
 };
 
-/**
- * Card props when the surface should render as a div.
- */
 type DivCardProps = CardBaseProps &
   Omit<HTMLAttributes<HTMLDivElement>, "children" | "className">;
 
-/**
- * Public card props supporting either link or div rendering.
- */
 export type CardProps = LinkCardProps | DivCardProps;
 
-/**
- * Concatenates CSS class names without an external helper dependency.
- *
- * @param classNames - Candidate class names including falsy values.
- * @returns A normalized class name string.
- */
-function joinClassNames(
-  ...classNames: Array<string | false | null | undefined>
-): string {
-  return classNames.filter(Boolean).join(" ");
-}
-
-/**
- * Renders the canonical Murmur card surface.
- *
- * @param props - Link or div props describing the card behavior.
- * @returns A static, linked, or keyboard-accessible interactive card.
- */
 export default function Card(props: Readonly<CardProps>) {
   const isInteractive = "href" in props || props.onClick !== undefined;
-  const cardClassName = joinClassNames(
+  const cardClassName = cn(
     "glass-card",
     "ui-card",
     isInteractive && "surface-hoverable ui-card--interactive",
@@ -114,11 +74,6 @@ export default function Card(props: Readonly<CardProps>) {
     ...rest
   } = props;
 
-  /**
-   * Mirrors native button keyboard behavior for clickable div cards.
-   *
-   * @param event - The current keyboard interaction.
-   */
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     onKeyDown?.(event);
 

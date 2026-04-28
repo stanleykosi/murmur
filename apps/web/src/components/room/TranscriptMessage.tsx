@@ -1,9 +1,5 @@
 /**
  * Individual live transcript message for the Murmur room transcript panel.
- *
- * The message component keeps transcript presentation focused and readable:
- * accent-colored speaker identity, relative timing, and a calm editorial card
- * treatment that can be streamed repeatedly without overwhelming the page.
  */
 
 import type { CSSProperties } from "react";

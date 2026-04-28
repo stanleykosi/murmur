@@ -74,32 +74,26 @@ function buildRoomListenersKey(roomId: string): string {
 }
 
 /**
- * Extracts the preferred user email from a Clerk webhook payload.
- *
- * The primary email is preferred when configured. If Clerk has not marked a
- * primary email yet, Murmur falls back to the first email address explicitly
- * present in the webhook payload.
+ * Extracts the canonical primary user email from a Clerk webhook payload.
  *
  * @param user - Clerk webhook user payload.
- * @returns The normalized preferred email address.
- * @throws {ValidationError} When no usable email address is present.
+ * @returns The normalized primary email address.
+ * @throws {ValidationError} When no usable primary email address is present.
  */
-function getPreferredEmail(user: UserJSON): string {
+function getPrimaryEmail(user: UserJSON): string {
   const primaryEmail = user.primary_email_address_id
     ? user.email_addresses.find(
         (emailAddress) => emailAddress.id === user.primary_email_address_id,
       )?.email_address
     : undefined;
-  const fallbackEmail = user.email_addresses[0]?.email_address;
-  const candidateEmail = primaryEmail ?? fallbackEmail;
 
-  if (candidateEmail === undefined) {
+  if (primaryEmail === undefined) {
     throw new ValidationError(
-      `Clerk user "${user.id}" does not include an email address.`,
+      `Clerk user "${user.id}" does not include a primary email address.`,
     );
   }
 
-  return normalizeRequiredString(candidateEmail, "email");
+  return normalizeRequiredString(primaryEmail, "email");
 }
 
 /**
@@ -173,7 +167,7 @@ export function normalizeClerkUserSyncInput(
   user: UserJSON,
 ): ClerkUserSyncInput {
   const clerkId = normalizeRequiredString(user.id, "clerkId");
-  const email = getPreferredEmail(user);
+  const email = getPrimaryEmail(user);
 
   return {
     avatarUrl:
@@ -188,32 +182,6 @@ export function normalizeClerkUserSyncInput(
 }
 
 /**
- * Returns whether a database error corresponds to the unique email constraint.
- *
- * PostgreSQL surfaces unique violations with code `23505`. We additionally
- * check the constraint name so only the canonical `users.email` collision
- * triggers Murmur's explicit email-reconciliation path.
- *
- * @param error - Unknown database error thrown by Drizzle/Postgres.
- * @returns True when the error represents `users_email_unique`.
- */
-function isUsersEmailUniqueConstraintViolation(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
-    return false;
-  }
-
-  const candidate = error as {
-    code?: unknown;
-    constraint?: unknown;
-  };
-
-  return (
-    candidate.code === "23505"
-    && candidate.constraint === "users_email_unique"
-  );
-}
-
-/**
  * Upserts a Clerk user into the local Murmur `users` table.
  *
  * @param user - Clerk webhook user payload.
@@ -223,62 +191,35 @@ export async function upsertUser(user: UserJSON): Promise<User> {
   const normalizedUser = normalizeClerkUserSyncInput(user);
   const updatedAt = new Date().toISOString();
 
-  try {
-    const [persistedUser] = await db
-      .insert(users)
-      .values({
+  const [persistedUser] = await db
+    .insert(users)
+    .values({
+      avatarUrl: normalizedUser.avatarUrl,
+      clerkId: normalizedUser.clerkId,
+      displayName: normalizedUser.displayName,
+      email: normalizedUser.email,
+      role: normalizedUser.role,
+      updatedAt,
+    })
+    .onConflictDoUpdate({
+      target: users.clerkId,
+      set: {
         avatarUrl: normalizedUser.avatarUrl,
-        clerkId: normalizedUser.clerkId,
         displayName: normalizedUser.displayName,
         email: normalizedUser.email,
         role: normalizedUser.role,
         updatedAt,
-      })
-      .onConflictDoUpdate({
-        target: users.clerkId,
-        set: {
-          avatarUrl: normalizedUser.avatarUrl,
-          displayName: normalizedUser.displayName,
-          email: normalizedUser.email,
-          role: normalizedUser.role,
-          updatedAt,
-        },
-      })
-      .returning();
+      },
+    })
+    .returning();
 
-    if (!persistedUser) {
-      throw new Error(
-        `Upserting Clerk user "${normalizedUser.clerkId}" did not return a persisted row.`,
-      );
-    }
-
-    return mapUserRecordToUser(persistedUser);
-  } catch (error) {
-    if (!isUsersEmailUniqueConstraintViolation(error)) {
-      throw error;
-    }
-
-    const [persistedUser] = await db
-      .update(users)
-      .set({
-        avatarUrl: normalizedUser.avatarUrl,
-        clerkId: normalizedUser.clerkId,
-        displayName: normalizedUser.displayName,
-        email: normalizedUser.email,
-        role: normalizedUser.role,
-        updatedAt,
-      })
-      .where(eq(users.email, normalizedUser.email))
-      .returning();
-
-    if (!persistedUser) {
-      throw new Error(
-        `Reconciling Clerk user "${normalizedUser.clerkId}" by email "${normalizedUser.email}" did not return a persisted row.`,
-      );
-    }
-
-    return mapUserRecordToUser(persistedUser);
+  if (!persistedUser) {
+    throw new Error(
+      `Upserting Clerk user "${normalizedUser.clerkId}" did not return a persisted row.`,
+    );
   }
+
+  return mapUserRecordToUser(persistedUser);
 }
 
 /**

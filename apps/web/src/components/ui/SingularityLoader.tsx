@@ -1,17 +1,10 @@
 import type { SVGAttributes } from "react";
 
+import { cn } from "@/lib/utils";
+
 interface SingularityLoaderProps
   extends Omit<SVGAttributes<SVGSVGElement>, "children"> {}
 
-function joinClassNames(
-  ...classNames: Array<string | false | null | undefined>
-): string {
-  return classNames.filter(Boolean).join(" ");
-}
-
-/**
- * Fluid loader used in place of a conventional spinner.
- */
 export default function SingularityLoader({
   className,
   ...rest
@@ -20,7 +13,7 @@ export default function SingularityLoader({
     <svg
       viewBox="0 0 64 64"
       aria-hidden="true"
-      className={joinClassNames("ui-singularity-loader", className)}
+      className={cn("ui-singularity-loader", className)}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       {...rest}

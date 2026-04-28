@@ -2,8 +2,8 @@
  * Runtime environment validation for the Murmur API service.
  *
  * This module is the single source of truth for API configuration. It loads
- * process environment variables, validates the Step 4 contract with fail-fast
- * diagnostics, and exports a parsed object for all other modules to consume.
+ * process environment variables, validates them with fail-fast diagnostics, and
+ * exports a parsed object for all other modules to consume.
  */
 
 import "dotenv/config";

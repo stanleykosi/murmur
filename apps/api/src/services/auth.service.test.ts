@@ -15,9 +15,6 @@ const insertOnConflictDoUpdateMock = vi.fn();
 const insertReturningMock = vi.fn();
 const redisSaddMock = vi.fn();
 const redisSremMock = vi.fn();
-const updateReturningMock = vi.fn();
-const updateWhereMock = vi.fn();
-const updateSetMock = vi.fn();
 const transactionUpdateWhereMock = vi.fn();
 const transactionUpdateSetMock = vi.fn(() => ({
   where: transactionUpdateWhereMock,
@@ -45,9 +42,6 @@ vi.mock("../db/client.js", () => ({
       values: insertValuesMock,
     })),
     transaction: transactionMock,
-    update: vi.fn(() => ({
-      set: updateSetMock,
-    })),
   },
 }));
 
@@ -140,15 +134,6 @@ beforeEach(() => {
   }));
   redisSaddMock.mockReset();
   redisSremMock.mockReset();
-  updateReturningMock.mockReset();
-  updateWhereMock.mockReset();
-  updateWhereMock.mockImplementation(() => ({
-    returning: updateReturningMock,
-  }));
-  updateSetMock.mockReset();
-  updateSetMock.mockImplementation(() => ({
-    where: updateWhereMock,
-  }));
   transactionDeleteMock.mockReset();
   transactionDeleteMock.mockImplementation(() => ({
     where: transactionDeleteWhereMock,
@@ -184,6 +169,19 @@ describe("normalizeClerkUserSyncInput", () => {
     );
 
     expect(normalizedUser.email).toBe("primary@example.com");
+  });
+
+  /**
+   * Clerk users must point at one canonical primary email address.
+   */
+  it("rejects users without a matching primary email address", () => {
+    expect(() =>
+      authServiceModule.normalizeClerkUserSyncInput(
+        createClerkUserFixture({
+          primary_email_address_id: "missing_email",
+        }),
+      ),
+    ).toThrow(/primary email address/i);
   });
 
   /**
@@ -251,6 +249,43 @@ describe("normalizeClerkUserSyncInput", () => {
         }),
       ),
     ).toThrow(/unsupported role/i);
+  });
+});
+
+describe("upsertUser", () => {
+  /**
+   * The canonical sync path inserts or updates by Clerk id only.
+   */
+  it("upserts a user by clerk id", async () => {
+    insertReturningMock.mockResolvedValueOnce([
+      {
+        avatarUrl: "https://img.example.com/nova.png",
+        clerkId: "user_123",
+        createdAt: "2026-03-29T00:00:00.000Z",
+        displayName: "Nova Prime",
+        email: "primary@example.com",
+        id: "local-user-123",
+        role: "listener",
+        updatedAt: "2026-03-29T00:00:05.000Z",
+      },
+    ]);
+
+    const persistedUser = await authServiceModule.upsertUser(
+      createClerkUserFixture(),
+    );
+
+    expect(insertOnConflictDoUpdateMock).toHaveBeenCalledWith({
+      target: expect.anything(),
+      set: {
+        avatarUrl: "https://img.example.com/nova.png",
+        displayName: "Nova Prime",
+        email: "primary@example.com",
+        role: "listener",
+        updatedAt: expect.any(String),
+      },
+    });
+    expect(persistedUser.clerkId).toBe("user_123");
+    expect(persistedUser.email).toBe("primary@example.com");
   });
 });
 
@@ -334,47 +369,5 @@ describe("deleteUser", () => {
       "room:room-a:listeners",
       "local-user-123",
     );
-  });
-});
-
-describe("upsertUser", () => {
-  /**
-   * A unique email conflict should reconcile the existing local row instead of
-   * crashing when Clerk re-creates the same human with a new Clerk user id.
-   */
-  it("reconciles an existing user row by email when the clerk id changes", async () => {
-    insertReturningMock.mockRejectedValueOnce({
-      code: "23505",
-      constraint: "users_email_unique",
-    });
-    updateReturningMock.mockResolvedValueOnce([
-      {
-        avatarUrl: "https://img.example.com/nova.png",
-        clerkId: "user_456",
-        createdAt: "2026-03-29T00:00:00.000Z",
-        displayName: "Nova Prime",
-        email: "primary@example.com",
-        id: "local-user-123",
-        role: "listener",
-        updatedAt: "2026-03-29T00:00:05.000Z",
-      },
-    ]);
-
-    const persistedUser = await authServiceModule.upsertUser(
-      createClerkUserFixture({
-        id: "user_456",
-      }),
-    );
-
-    expect(updateSetMock).toHaveBeenCalledWith({
-      avatarUrl: "https://img.example.com/nova.png",
-      clerkId: "user_456",
-      displayName: "Nova Prime",
-      email: "primary@example.com",
-      role: "listener",
-      updatedAt: expect.any(String),
-    });
-    expect(persistedUser.clerkId).toBe("user_456");
-    expect(persistedUser.email).toBe("primary@example.com");
   });
 });

@@ -7,16 +7,9 @@
  */
 
 import { z, type ZodType } from "zod";
+import type { ValidationIssueDetail } from "@murmur/shared";
 
 import { ValidationError } from "./errors.js";
-
-/**
- * Stable validation issue payload returned in API error details.
- */
-export interface ValidationIssueDetail {
-  message: string;
-  path: string;
-}
 
 /**
  * Serializes Zod issues into a stable payload shape for API error responses.

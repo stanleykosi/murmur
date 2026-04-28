@@ -3,6 +3,7 @@
  */
 
 export * from "./constants.js";
+export * from "./api-contracts.js";
 export * from "./events.js";
 export * from "./house-agents.js";
 export * from "./moderation.js";

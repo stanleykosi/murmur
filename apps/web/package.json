@@ -1,5 +1,4 @@
 {
-  "//": "Workspace manifest for the Murmur Next.js frontend scaffold.",
   "name": "web",
   "version": "0.1.0",
   "private": true,

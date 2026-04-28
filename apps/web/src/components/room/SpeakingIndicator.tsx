@@ -1,10 +1,5 @@
 /**
- * Premium speaking-state halo for Murmur room avatars.
- *
- * This component renders the animated pulse treatment used to indicate the
- * active speaker on the live room stage. The effect intentionally mirrors the
- * landing page's authored glow language instead of falling back to utilitarian
- * status rings.
+ * Animated speaking-state halo for Murmur room avatars.
  */
 
 import type { CSSProperties } from "react";

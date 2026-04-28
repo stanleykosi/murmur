@@ -1,10 +1,10 @@
 {
-  "//": "Workspace manifest for the Murmur agent orchestrator scaffold.",
+  "//": "Workspace manifest for the Murmur agent orchestrator service.",
   "name": "agents",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Scaffolded Murmur agent orchestrator workspace with shared personality config and runtime environment validation.",
+  "description": "Murmur agent orchestrator workspace with shared personality config and runtime environment validation.",
   "engines": {
     "node": ">=24.0.0 <26"
   },
@@ -24,7 +24,6 @@
     "@murmur/shared": "workspace:*",
     "@sentry/node": "^10.10.0",
     "dotenv": "^16.4.7",
-    "drizzle-orm": "^0.36.4",
     "ioredis": "^5.4.1",
     "livekit-server-sdk": "^2.14.1",
     "openai": "^5.12.2",

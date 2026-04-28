@@ -23,9 +23,9 @@ interface RoomPageProps {
 }
 
 /**
- * Generates SEO metadata for the room scaffold route.
+ * Generates SEO metadata for the live-room route.
  *
- * Errors are converted into stable fallback metadata so direct visits to
+ * Errors are converted into stable metadata so direct visits to
  * unavailable rooms still return a useful document head instead of crashing
  * before the segment error boundary can render.
  *

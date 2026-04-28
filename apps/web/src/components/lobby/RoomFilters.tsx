@@ -2,11 +2,6 @@
 
 /**
  * Format-filter controls for the Murmur room lobby.
- *
- * This component stays intentionally focused on the single lobby filtering
- * concern for the current product surface: listeners can switch between all
- * live rooms, moderated rooms, and free-for-all rooms without introducing a
- * broader search or sort system.
  */
 
 import type { RoomFormat } from "@/types";

@@ -1,10 +1,10 @@
 /**
  * LiveKit session bridge for the Murmur agent graph.
  *
- * Step 30 keeps session startup outside the graph, but the graph still owns the
- * final speech handoff for the `speak` node. This bridge adapts an already
- * started LiveKit `AgentSession`-like object to the graph's simple
- * `AgentSessionBridge` contract.
+ * The graph owns the final speech handoff for the `speak` node while session
+ * startup stays with the runner. This bridge adapts an already-started LiveKit
+ * `AgentSession`-like object to the graph's simple `AgentSessionBridge`
+ * contract.
  */
 
 import { AudioFrame } from "@livekit/rtc-node";

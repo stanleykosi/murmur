@@ -38,6 +38,11 @@ export interface DeadAirDetectedPayload {
   silenceStartedAt: number;
 }
 
+interface SilenceTimerEvents {
+  deadAirDetected: [payload: DeadAirDetectedPayload];
+  error: [error: Error];
+}
+
 /**
  * Runtime configuration supported by the silence timer.
  */
@@ -153,7 +158,7 @@ function resolveOptions(
 /**
  * Poll-based dead-air detector for one Murmur room.
  */
-export class SilenceTimer extends EventEmitter {
+export class SilenceTimer extends EventEmitter<SilenceTimerEvents> {
   private activePollToken: number | null = null;
 
   private intervalHandle: NodeJS.Timeout | null = null;
@@ -191,45 +196,6 @@ export class SilenceTimer extends EventEmitter {
     this.roomId = normalizeRequiredText(roomId, "roomId");
     this.hostAgentId = normalizeRequiredText(hostAgentId, "hostAgentId");
     this.options = resolveOptions(options);
-  }
-
-  public override on(
-    eventName: "deadAirDetected",
-    listener: (payload: DeadAirDetectedPayload) => void,
-  ): this;
-  public override on(
-    eventName: "error",
-    listener: (error: Error) => void,
-  ): this;
-  public override on(
-    eventName: string | symbol,
-    listener: (...args: any[]) => void,
-  ): this {
-    return super.on(eventName, listener);
-  }
-
-  public override once(
-    eventName: "deadAirDetected",
-    listener: (payload: DeadAirDetectedPayload) => void,
-  ): this;
-  public override once(
-    eventName: "error",
-    listener: (error: Error) => void,
-  ): this;
-  public override once(
-    eventName: string | symbol,
-    listener: (...args: any[]) => void,
-  ): this {
-    return super.once(eventName, listener);
-  }
-
-  public override emit(
-    eventName: "deadAirDetected",
-    payload: DeadAirDetectedPayload,
-  ): boolean;
-  public override emit(eventName: "error", error: Error): boolean;
-  public override emit(eventName: string | symbol, ...args: any[]): boolean {
-    return super.emit(eventName, ...args);
   }
 
   /**

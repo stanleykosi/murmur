@@ -1,9 +1,5 @@
 /**
  * Read-only room card used by the Murmur lobby grid.
- *
- * The card keeps the room payload aligned to the shared `Room` model so the
- * lobby, admin tools, and future realtime room surfaces all consume the same
- * canonical room shape from the API.
  */
 
 import type { CSSProperties } from "react";
@@ -29,8 +25,7 @@ type RoomCardStyle = CSSProperties & {
 };
 
 /**
- * Converts an agent name into the single-character token used before avatar
- * image assets are introduced in the next step.
+ * Converts an agent name into the single-character token used by compact agent chips.
  *
  * @param name - Agent display name.
  * @returns The leading uppercase grapheme for the current agent.
@@ -42,7 +37,7 @@ function getAgentInitial(name: string): string {
 }
 
 /**
- * Builds the CSS variable payload that colors the temporary avatar chip.
+ * Builds the CSS variable payload that colors the agent chip.
  *
  * @param agent - The room agent whose accent color should drive the chip.
  * @returns Inline styles containing the accent-color CSS variable.
@@ -125,7 +120,7 @@ function ArrowIcon() {
  * Renders a single clickable room card for the lobby grid.
  *
  * @param props - Card props containing the full shared room payload.
- * @returns An interactive card linking to the room scaffold route.
+ * @returns An interactive card linking to the room route.
  */
 export default function RoomCard({ room }: Readonly<RoomCardProps>) {
   const hostAgent = getHostAgent(room);
